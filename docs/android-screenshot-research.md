@@ -32,6 +32,13 @@
   - return `listener.getBuffer()?.asBitmap()`
 - `screenshot_shelf.xml` contains `@id/screenshot_preview_border` using `@drawable/overlay_border`.
 - `ScreenshotWindow` is a dedicated screenshot UI window titled `ScreenshotUI` and created with system window type `0x7f4`.
+- Framework inspection on this ROM confirms:
+  - `WindowManager.LayoutParams.TYPE_SCREENSHOT = 2036`
+  - `ScreenCapture.CaptureArgs.Builder.setExcludeLayers(...)` exists
+  - `ScreenCapture.captureLayersExcluding(...)` exists
+  - `DisplayContent.getLayerCaptureArgs(Set<Integer>)` excludes windows by type by collecting their `SurfaceControl`s
+  - `WindowManagerService.takeAssistScreenshot(Set<Integer>)` feeds that exclusion set into layer capture
+  - `IWindowManager` does not directly expose `takeAssistScreenshot(Set<Integer>)`
 
 ## Existing Reference
 - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c) shows the X11/compositor-style solution already used elsewhere.
@@ -96,6 +103,7 @@
 - This is likely the best path for the stated device environment because it does not require shipping a full custom ROM, but still permits framework-level behavior.
 - For Android 15 specifically, the likely hook surface is SystemUI's screenshot pipeline rather than the older pre-refactor controller classes.
 - On this specific build, the `com.android.systemui:screenshot` process is the primary hook target.
+- The lowest-risk first prototype is now: hook the screenshot process only, fetch the screenshot window's live `SurfaceControl`, and inject it into `CaptureArgs.setExcludeLayers(...)` before calling the existing `IWindowManager.captureDisplay(...)`.
 
 ## Architecture Options
 
@@ -142,6 +150,7 @@
 - Keep the secure-overlay test as a fallback, not the primary plan.
 - Inspect the real crDroid/Lineage `SystemUI.apk` to confirm whether AOSP class names still match the expected Android 15 pipeline.
 - Next concrete check: inspect framework and services jars on-device to see which window types or titles can be excluded through the window manager capture path, and whether `ScreenshotUI` can be filtered wholesale.
+- Next concrete implementation task: determine the exact hidden API path from the attached screenshot decor view to its `SurfaceControl` in the screenshot process, then test `setExcludeLayers(...)` there before attempting any system_server hook.
 
 ## Sources
 - Android Developers: Media projection

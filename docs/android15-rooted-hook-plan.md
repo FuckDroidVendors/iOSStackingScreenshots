@@ -49,6 +49,10 @@
 - `ImageCaptureImpl.captureDisplay(int, Rect)` is confirmed to call `IWindowManager.captureDisplay(...)` with a `ScreenCapture.CaptureArgs.Builder`.
 - `ScreenshotWindow` is real on this build and hosts the screenshot UI in a dedicated window titled `ScreenshotUI`.
 - `screenshot_shelf.xml` contains the existing preview border view `@id/screenshot_preview_border`.
+- `WindowManager.LayoutParams.TYPE_SCREENSHOT = 2036` on this device framework.
+- `ScreenCapture.CaptureArgs.Builder.setExcludeLayers(...)` is present in the device framework.
+- `DisplayContent.getLayerCaptureArgs(Set<Integer>)` excludes windows by collecting matching windows' `SurfaceControl`s.
+- `IWindowManager` does not directly expose the typed `takeAssistScreenshot(Set<Integer>)` path; it does expose `captureDisplay(...)`.
 
 ## Hook Candidates
 
@@ -57,11 +61,13 @@
 - Advantage: narrow hook close to the actual screenshot capture step.
 - Risk: may still need a way to resolve the preview surface into a `SurfaceControl` or compatible handle.
 - Status on this build: confirmed method exists exactly where expected.
+- New status: this is now the preferred first implementation path.
 
 ### Candidate 2: Hook lower at `IWindowManager.captureDisplay(...)` call sites
 - Intercept the call and redirect to hidden/internal layer-capture APIs.
 - Advantage: centralizes capture behavior.
 - Risk: binder interfaces and argument shapes are more fragile and harder to patch cleanly from LSPosed.
+- On this build, this is probably unnecessary for the first prototype because `CaptureArgs` itself already supports `setExcludeLayers(...)`.
 
 ### Candidate 3: Hook framework screenshot capture arg construction
 - Intercept the framework path that creates `LayerCaptureArgs` or equivalent internal capture args and inject the preview layer into `excludeLayers`.
@@ -74,6 +80,7 @@
 - Keep the preview inside stock SystemUI screenshot UI and identify its underlying window/surface.
 - Because this build uses a dedicated `ScreenshotWindow` titled `ScreenshotUI`, first test whether excluding that entire window is sufficient.
 - If excluding the whole screenshot UI window works, it is cleaner than tracking child surfaces.
+- Current best bet: use the attached `ScreenshotWindow` decor view to retrieve its live `SurfaceControl`, then exclude that surface during the next capture.
 
 ### Fallback
 - Create a separate privileged overlay window managed by the hook module.
@@ -112,9 +119,10 @@
 2. Hook `ScreenshotShelfViewProxy` or nearby screenshot shelf UI code.
 3. Confirm the border view can be recolored red reliably.
 4. Hook `ImageCaptureImpl.captureDisplay(...)` and log when a screenshot is initiated.
-5. Determine whether the `ScreenshotUI` window can be mapped directly to a window-manager exclusion input.
-6. Replace capture with a hidden/internal path using excluded layers.
-7. Validate repeated screenshots while the previous preview remains visible.
+5. Retrieve the live `SurfaceControl` for the attached `ScreenshotUI` window.
+6. Rebuild the capture args with `setExcludeLayers(new SurfaceControl[]{ screenshotUiSurface })`.
+7. Call the existing `IWindowManager.captureDisplay(...)`.
+8. Validate repeated screenshots while the previous preview remains visible.
 
 ## Validation Criteria
 - Taking screenshot N+1 does not visually hide screenshot N's preview.
@@ -132,4 +140,5 @@
 
 ## Immediate Next Step
 - `SystemUI.apk` inspection is done.
-- Next: inspect framework/services jars and identify the smallest exclusion mechanism that can target the dedicated `ScreenshotUI` window or its surface.
+- Framework/services inspection is done.
+- Next: find the exact hidden API chain from the screenshot window's attached view to its `SurfaceControl`, then build the first LSPosed module around that.

@@ -6,6 +6,7 @@
 - Do not revert user work unless explicitly asked.
 - If the work you completed is coherent and low-risk, try to make a sane atomic commit for your own changes.
 - Read [TODO.md](/home/duda/screenshotdroid/TODO.md), [WORKLOG.md](/home/duda/screenshotdroid/WORKLOG.md), and [docs/android-screenshot-research.md](/home/duda/screenshotdroid/docs/android-screenshot-research.md) before doing substantial work.
+- Also read [docs/android15-rooted-hook-plan.md](/home/duda/screenshotdroid/docs/android15-rooted-hook-plan.md) and [docs/lsposed-hook-blueprint.md](/home/duda/screenshotdroid/docs/lsposed-hook-blueprint.md) before starting rooted Android implementation work.
 
 ## Project Goal
 - Build an Android screenshot app with an iOS-like floating thumbnail/preview.

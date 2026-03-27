@@ -39,3 +39,23 @@
 - Confirmed screenshot shelf layout contains `@id/screenshot_preview_border` backed by `@drawable/overlay_border`.
 - Confirmed screenshot UI is hosted in a dedicated `ScreenshotWindow` titled `ScreenshotUI`, created with system window type `0x7f4`.
 - This strongly suggests the first rooted prototype should hook the `com.android.systemui:screenshot` process, recolor the border, and attempt exclusion at the screenshot window level before attempting finer-grained surface exclusion.
+- Pulled `/system/framework/framework.jar` and `/system/framework/services.jar` from the device and inspected them locally.
+- Confirmed framework-side facts on this ROM:
+  - `android.view.WindowManager.LayoutParams.TYPE_SCREENSHOT = 2036`
+  - `PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY = 1048576`
+  - `android.window.ScreenCapture.CaptureArgs.Builder.setExcludeLayers(...)` exists
+  - `android.window.ScreenCapture.captureLayersExcluding(...)` exists
+- Confirmed `DisplayContent.getLayerCaptureArgs(Set<Integer>)` excludes layers purely by `windowState.getWindowType()` and forwards those windows' `SurfaceControl`s into `setExcludeLayers(...)`.
+- Confirmed `WindowManagerService.takeAssistScreenshot(Set<Integer>)` uses that exclusion path, but `android.view.IWindowManager` does not expose that method directly; it only exposes `captureDisplay(...)` and `requestAssistScreenshot(...)`.
+- New preferred prototype strategy:
+  - stay inside `com.android.systemui:screenshot`
+  - get the live `SurfaceControl` for the attached `ScreenshotUI` window
+  - hook `ImageCaptureImpl.captureDisplay(...)`
+  - rebuild capture args with `setExcludeLayers(...)`
+  - reuse the existing `IWindowManager.captureDisplay(...)` binder call
+- Confirmed surface access path on the device framework:
+  - `Window.getRootSurfaceControl()` exists
+  - `View.getRootSurfaceControl()` exists
+  - concrete attached root is `ViewRootImpl`
+  - `ViewRootImpl` contains a real `mSurfaceControl`
+- Added [docs/lsposed-hook-blueprint.md](/home/duda/screenshotdroid/docs/lsposed-hook-blueprint.md) with the first concrete LSPosed implementation design.
