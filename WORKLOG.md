@@ -9,3 +9,5 @@
   - stock-app approach using `MediaProjection` and overlay windows, with compromises
   - system/OEM approach using private screenshot APIs with excluded layers
 - Added repo instructions so future LLMs start by checking uncommitted files and keep documentation current.
+- New constraint discovered: target device is rooted with KernelSU and also has LSPosed and Shizuku available.
+- This makes rooted/privileged designs first-class options and substantially reduces the need to constrain the design to public SDK APIs.

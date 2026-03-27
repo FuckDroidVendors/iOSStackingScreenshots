@@ -20,8 +20,15 @@
 
 ## Recommended Paths
 - Stock app path: accept a compromised behavior, likely via `MediaProjection` plus an overlay and careful UX tradeoffs.
+- Rooted-device path: prefer a privileged implementation using KernelSU/Shizuku/LSPosed hooks or a small system component, then exclude the preview layer in the screenshot pipeline.
 - System/OEM path: implement the preview as a privileged/system overlay and exclude its layer in the screenshot pipeline.
 - If exact behavior is mandatory, bias toward AOSP/SystemUI/framework work, not a Play Store-only app architecture.
+
+## Device Capabilities Known So Far
+- Target device is rooted with KernelSU.
+- LSPosed is available.
+- Shizuku is available.
+- This means hidden APIs, privileged binder calls, framework hooks, and even replacing/intercepting the screenshot flow are realistic options.
 
 ## Documentation Discipline
 - Update [TODO.md](/home/duda/screenshotdroid/TODO.md) when priorities change.
