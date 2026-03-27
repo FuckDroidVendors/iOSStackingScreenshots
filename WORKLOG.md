@@ -59,3 +59,11 @@
   - concrete attached root is `ViewRootImpl`
   - `ViewRootImpl` contains a real `mSurfaceControl`
 - Added [docs/lsposed-hook-blueprint.md](/home/duda/screenshotdroid/docs/lsposed-hook-blueprint.md) with the first concrete LSPosed implementation design.
+- Created a minimal Android/LSPosed module project under [app](/home/duda/screenshotdroid/app).
+- Implemented first hooks:
+  - `ScreenshotShelfViewProxy` border recolor to red
+  - `ScreenshotController` / `ScreenshotWindow` state capture
+  - `ImageCaptureImpl.captureDisplay(...)` interception scaffold using `setExcludeLayers(...)`
+- Added a repo-local Gradle wrapper.
+- Verified build success with `gradle assembleDebug`.
+- Built debug APK at [app/build/outputs/apk/debug/app-debug.apk](/home/duda/screenshotdroid/app/build/outputs/apk/debug/app-debug.apk).

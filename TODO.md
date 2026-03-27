@@ -18,6 +18,9 @@
 - Prototype replacing `ImageCaptureImpl.captureDisplay(...)` with a call that adds `setExcludeLayers(...)` for the screenshot UI surface.
 - Validate whether excluding only the screenshot window surface removes the floating preview while preserving underlying app pixels.
 - Convert [docs/lsposed-hook-blueprint.md](/home/duda/screenshotdroid/docs/lsposed-hook-blueprint.md) into a minimal LSPosed module skeleton.
+- Install the built module on-device, enable it for `com.android.systemui`, and verify the red border proof-of-life hook.
+- Capture LSPosed logs while taking screenshots to verify `ImageCaptureImpl.captureDisplay(...)` interception.
+- Verify whether `setExcludeLayers(...)` on the `captureDisplay(...)` path actually removes the screenshot shelf from subsequent captures on crDroid 15.
 - Investigate whether Android 14+ app-window sharing is useful for a scoped variant that captures only the selected app window.
 - Inspect AOSP/SystemUI screenshot flow in more detail and identify the smallest privileged patch that excludes the thumbnail overlay layer.
 - Decide target product model:

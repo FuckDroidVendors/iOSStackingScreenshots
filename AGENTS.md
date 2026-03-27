@@ -35,3 +35,4 @@
 - Update [TODO.md](/home/duda/screenshotdroid/TODO.md) when priorities change.
 - Append to [WORKLOG.md](/home/duda/screenshotdroid/WORKLOG.md) for each meaningful research or implementation session.
 - Keep [docs/android-screenshot-research.md](/home/duda/screenshotdroid/docs/android-screenshot-research.md) current when findings change.
+- Prefer `./gradlew` for builds now that the wrapper exists.
