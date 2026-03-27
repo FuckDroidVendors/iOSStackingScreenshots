@@ -43,12 +43,20 @@
 - `ScreenshotShelfViewProxy` controls the screenshot shelf view shown to the user.
 - That code references `R.id.screenshot_preview_border`, which is a direct anchor for the requested red border indicator.
 
+## Confirmed crDroid 11.9 Findings
+- The actual device `SystemUI.apk` confirms all of these classes are present on-device, not just in AOSP references.
+- `TakeScreenshotService` is declared in `AndroidManifest.xml` with `android:process=":screenshot"`.
+- `ImageCaptureImpl.captureDisplay(int, Rect)` is confirmed to call `IWindowManager.captureDisplay(...)` with a `ScreenCapture.CaptureArgs.Builder`.
+- `ScreenshotWindow` is real on this build and hosts the screenshot UI in a dedicated window titled `ScreenshotUI`.
+- `screenshot_shelf.xml` contains the existing preview border view `@id/screenshot_preview_border`.
+
 ## Hook Candidates
 
 ### Candidate 1: Hook `ImageCaptureImpl.captureDisplay(...)`
 - Replace or wrap the call so capture args are built with excluded layers.
 - Advantage: narrow hook close to the actual screenshot capture step.
 - Risk: may still need a way to resolve the preview surface into a `SurfaceControl` or compatible handle.
+- Status on this build: confirmed method exists exactly where expected.
 
 ### Candidate 2: Hook lower at `IWindowManager.captureDisplay(...)` call sites
 - Intercept the call and redirect to hidden/internal layer-capture APIs.
@@ -64,7 +72,8 @@
 
 ### Preferred
 - Keep the preview inside stock SystemUI screenshot UI and identify its underlying window/surface.
-- If the screenshot shelf's own window can be excluded as a whole, this is the cleanest design.
+- Because this build uses a dedicated `ScreenshotWindow` titled `ScreenshotUI`, first test whether excluding that entire window is sufficient.
+- If excluding the whole screenshot UI window works, it is cleaner than tracking child surfaces.
 
 ### Fallback
 - Create a separate privileged overlay window managed by the hook module.
@@ -99,12 +108,13 @@
 - Shizuku can be used if the companion app needs privileged commands outside the hooked process.
 
 ## Concrete First Prototype
-1. Hook `ScreenshotShelfViewProxy` or nearby screenshot shelf UI code.
-2. Confirm the border view can be recolored red reliably.
-3. Hook `ImageCaptureImpl.captureDisplay(...)` and log when a screenshot is initiated.
-4. Determine whether the preview UI belongs to a window/surface that can be mapped to an exclude-layer input.
-5. Replace capture with a hidden/internal path using excluded layers.
-6. Validate repeated screenshots while the previous preview remains visible.
+1. Hook the `com.android.systemui:screenshot` process.
+2. Hook `ScreenshotShelfViewProxy` or nearby screenshot shelf UI code.
+3. Confirm the border view can be recolored red reliably.
+4. Hook `ImageCaptureImpl.captureDisplay(...)` and log when a screenshot is initiated.
+5. Determine whether the `ScreenshotUI` window can be mapped directly to a window-manager exclusion input.
+6. Replace capture with a hidden/internal path using excluded layers.
+7. Validate repeated screenshots while the previous preview remains visible.
 
 ## Validation Criteria
 - Taking screenshot N+1 does not visually hide screenshot N's preview.
@@ -121,4 +131,5 @@
 - Some strategies may require hooks in both SystemUI and system_server.
 
 ## Immediate Next Step
-- Inspect the actual `SystemUI.apk` and framework jars from the target device and map the real classes/methods before writing the hook module.
+- `SystemUI.apk` inspection is done.
+- Next: inspect framework/services jars and identify the smallest exclusion mechanism that can target the dedicated `ScreenshotUI` window or its surface.

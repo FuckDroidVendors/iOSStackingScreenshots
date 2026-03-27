@@ -14,6 +14,25 @@
 - Android version: 15.
 - This materially changes feasibility: private APIs and framework hooks are now realistic, even if they remain non-portable and version-sensitive.
 
+## Confirmed Device-Specific Findings
+- `SystemUI.apk` lives at `/system_ext/priv-app/SystemUI/SystemUI.apk`.
+- `TakeScreenshotService` is declared in `AndroidManifest.xml` and runs in the `:screenshot` process.
+- This build contains the expected screenshot classes:
+  - `TakeScreenshotService`
+  - `TakeScreenshotExecutor`
+  - `TakeScreenshotExecutorImpl`
+  - `ImageCaptureImpl`
+  - `PolicyRequestProcessor`
+  - `ScreenshotController`
+  - `ScreenshotShelfViewProxy`
+  - `ScreenshotWindow`
+- `ImageCaptureImpl.captureDisplay(int, Rect)` is confirmed to:
+  - build `new ScreenCapture.CaptureArgs.Builder().setSourceCrop(rect).build()`
+  - call `IWindowManager.captureDisplay(displayId, captureArgs, listener)`
+  - return `listener.getBuffer()?.asBitmap()`
+- `screenshot_shelf.xml` contains `@id/screenshot_preview_border` using `@drawable/overlay_border`.
+- `ScreenshotWindow` is a dedicated screenshot UI window titled `ScreenshotUI` and created with system window type `0x7f4`.
+
 ## Existing Reference
 - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c) shows the X11/compositor-style solution already used elsewhere.
 - That approach works because the compositor can decide what enters the captured composition and can exclude the thumbnail overlay during capture.
@@ -76,6 +95,7 @@
   - or patch capture args before the screenshot is taken
 - This is likely the best path for the stated device environment because it does not require shipping a full custom ROM, but still permits framework-level behavior.
 - For Android 15 specifically, the likely hook surface is SystemUI's screenshot pipeline rather than the older pre-refactor controller classes.
+- On this specific build, the `com.android.systemui:screenshot` process is the primary hook target.
 
 ## Architecture Options
 
@@ -121,6 +141,7 @@
   - a Shizuku-backed privileged call can capture while excluding that layer
 - Keep the secure-overlay test as a fallback, not the primary plan.
 - Inspect the real crDroid/Lineage `SystemUI.apk` to confirm whether AOSP class names still match the expected Android 15 pipeline.
+- Next concrete check: inspect framework and services jars on-device to see which window types or titles can be excluded through the window manager capture path, and whether `ScreenshotUI` can be filtered wholesale.
 
 ## Sources
 - Android Developers: Media projection

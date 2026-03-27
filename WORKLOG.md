@@ -20,3 +20,22 @@
   - internal WM capture paths support `setExcludeLayers(...)`
 - Found that modern SystemUI screenshot UI includes a dedicated preview border view (`R.id.screenshot_preview_border`), which is a natural place to apply a red "hook active" indicator.
 - Tried to inspect the connected device via `adb`, but sandbox restrictions prevented starting the adb daemon in this environment. Device-side APK/framework inspection remains a next step.
+- ADB access was later enabled. Confirmed live device:
+  - transport over `192.168.2.56:5555`
+  - `ro.build.version.release_or_codename=15`
+  - `ro.build.version.sdk=35`
+  - `ro.crdroid.version=15.0`
+- Pulled `/system_ext/priv-app/SystemUI/SystemUI.apk` from the device and inspected it locally.
+- Confirmed actual screenshot classes on this build:
+  - `TakeScreenshotService`
+  - `TakeScreenshotExecutor` and `TakeScreenshotExecutorImpl`
+  - `ImageCaptureImpl`
+  - `PolicyRequestProcessor`
+  - `ScreenshotController`
+  - `ScreenshotShelfViewProxy`
+  - `ScreenshotWindow`
+- Confirmed `TakeScreenshotService` runs in the dedicated `:screenshot` process.
+- Confirmed `ImageCaptureImpl.captureDisplay(int, Rect)` builds `ScreenCapture.CaptureArgs` and calls `IWindowManager.captureDisplay(...)`.
+- Confirmed screenshot shelf layout contains `@id/screenshot_preview_border` backed by `@drawable/overlay_border`.
+- Confirmed screenshot UI is hosted in a dedicated `ScreenshotWindow` titled `ScreenshotUI`, created with system window type `0x7f4`.
+- This strongly suggests the first rooted prototype should hook the `com.android.systemui:screenshot` process, recolor the border, and attempt exclusion at the screenshot window level before attempting finer-grained surface exclusion.

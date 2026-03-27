@@ -8,6 +8,12 @@
 - Map the actual screenshot classes on crDroid 11.9 / Android 15 by inspecting `SystemUI.apk` and framework jars from the device.
 - Prototype an LSPosed hook on the screenshot capture path first, before building a standalone app UI.
 - Prototype a visible "hook active" cue by recoloring the screenshot preview border to red inside SystemUI's screenshot shelf.
+- Inspect `framework.jar` / `services.jar` from the device to find the cleanest exclusion path for the screenshot window type used by SystemUI.
+- Determine whether excluding the whole `ScreenshotUI` window is sufficient, or whether a child surface from the screenshot shelf must be excluded instead.
+- Build the first LSPosed proof-of-life hook in the `com.android.systemui:screenshot` process:
+  - log `ImageCaptureImpl.captureDisplay(...)`
+  - recolor `screenshot_preview_border`
+  - identify the `ScreenshotWindow` / title / type at runtime
 - Investigate whether Android 14+ app-window sharing is useful for a scoped variant that captures only the selected app window.
 - Inspect AOSP/SystemUI screenshot flow in more detail and identify the smallest privileged patch that excludes the thumbnail overlay layer.
 - Decide target product model:
