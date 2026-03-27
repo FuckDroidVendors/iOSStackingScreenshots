@@ -1,0 +1,11 @@
+# TODO
+
+- Verify with a real prototype whether a secure overlay produces black/empty pixels or preserved underlying content in screenshots and `MediaProjection`.
+- Build a minimal Android spike using `MediaProjection` plus `TYPE_APPLICATION_OVERLAY` to measure practical limitations.
+- Investigate whether Android 14+ app-window sharing is useful for a scoped variant that captures only the selected app window.
+- Inspect AOSP/SystemUI screenshot flow in more detail and identify the smallest privileged patch that excludes the thumbnail overlay layer.
+- Decide target product model:
+  - stock unprivileged app with compromises
+  - privileged app on rooted/device-owner builds
+  - AOSP/SystemUI modification
+- If Android implementation starts, add a concrete architecture doc and test matrix.
