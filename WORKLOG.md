@@ -11,3 +11,12 @@
 - Added repo instructions so future LLMs start by checking uncommitted files and keep documentation current.
 - New constraint discovered: target device is rooted with KernelSU and also has LSPosed and Shizuku available.
 - This makes rooted/privileged designs first-class options and substantially reduces the need to constrain the design to public SDK APIs.
+- Additional device detail: POCO F1 (`beryllium`), crDroid 11.9, Android 15, LineageOS-based.
+- Investigated modern Android 15 AOSP screenshot flow:
+  - `TakeScreenshotService` receives requests
+  - `TakeScreenshotExecutor` dispatches
+  - `ScreenshotRequestProcessor` / `RequestProcessor` can rewrite requests
+  - `ImageCaptureImpl.captureDisplay(...)` currently calls `IWindowManager.captureDisplay(...)`
+  - internal WM capture paths support `setExcludeLayers(...)`
+- Found that modern SystemUI screenshot UI includes a dedicated preview border view (`R.id.screenshot_preview_border`), which is a natural place to apply a red "hook active" indicator.
+- Tried to inspect the connected device via `adb`, but sandbox restrictions prevented starting the adb daemon in this environment. Device-side APK/framework inspection remains a next step.

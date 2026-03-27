@@ -9,6 +9,9 @@
 - The target device is rooted with KernelSU.
 - LSPosed is installed.
 - Shizuku is available.
+- Device: POCO F1 (`beryllium`).
+- ROM: crDroid 11.9, LineageOS-derived.
+- Android version: 15.
 - This materially changes feasibility: private APIs and framework hooks are now realistic, even if they remain non-portable and version-sensitive.
 
 ## Existing Reference
@@ -72,6 +75,7 @@
   - route capture through hidden/internal screenshot APIs that support excluded layers
   - or patch capture args before the screenshot is taken
 - This is likely the best path for the stated device environment because it does not require shipping a full custom ROM, but still permits framework-level behavior.
+- For Android 15 specifically, the likely hook surface is SystemUI's screenshot pipeline rather than the older pre-refactor controller classes.
 
 ## Architecture Options
 
@@ -107,6 +111,7 @@
 - Use Shizuku if binder access is needed from the app side.
 - Value: much closer to exact behavior on the target device without building a full ROM.
 - Cost: Android-version fragility, private API churn, SELinux / permission edge cases, and more maintenance than an ordinary app.
+- On Android 15, also consider reusing the existing SystemUI screenshot shelf UI instead of drawing a second independent overlay. That minimizes flicker risk and makes it easy to add a red diagnostic border while testing hooks.
 
 ## Recommended Next Investigation
 - Because the device is rooted, audit SystemUI/framework screenshot flow first.
@@ -115,6 +120,7 @@
   - an LSPosed hook can exclude a known overlay layer from capture
   - a Shizuku-backed privileged call can capture while excluding that layer
 - Keep the secure-overlay test as a fallback, not the primary plan.
+- Inspect the real crDroid/Lineage `SystemUI.apk` to confirm whether AOSP class names still match the expected Android 15 pipeline.
 
 ## Sources
 - Android Developers: Media projection
