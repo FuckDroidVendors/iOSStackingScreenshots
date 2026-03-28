@@ -2,19 +2,24 @@ package dev.duda.screenshotdroid;
 
 import android.animation.AnimatorSet;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.PixelCopy;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.ImageView;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.List;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
@@ -23,6 +28,9 @@ final class ScreenshotHooks {
     private static final String TAG = "ScreenshotDroid";
     private static final long CONTINUITY_OVERLAY_MS = 1200L;
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
+    private static final String STACK_CARD_TAG_PREFIX = "ScreenshotDroidStackCard";
+    private static final float STACK_CARD_X_OFFSET_DP = 8.0f;
+    private static final float STACK_CARD_Y_OFFSET_DP = 6.0f;
     private static volatile boolean installed;
     private static Runnable continuityOverlayRemoval;
 
@@ -78,11 +86,27 @@ final class ScreenshotHooks {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
                 Object screenshotData = param.args[0];
-                HookState.setLastScreenshotData(screenshotData);
+                Bitmap previousBitmap = HookState.getLastPreviewBitmap();
+                if (previousBitmap != null && HookState.isReentryGraceActive()) {
+                    HookState.pushStackBitmap(previousBitmap);
+                }
                 Object bitmap = ReflectionHelpers.getObjectFieldIfExists(screenshotData, "bitmap");
                 if (bitmap instanceof Bitmap) {
                     HookState.setLastPreviewBitmap((Bitmap) bitmap);
                     log("Cached screenshot preview bitmap");
+                }
+            }
+
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                View shelfView = HookState.getScreenshotShelfView();
+                if (shelfView != null) {
+                    shelfView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            updateStackUi(shelfView);
+                        }
+                    });
                 }
             }
         });
@@ -124,7 +148,8 @@ final class ScreenshotHooks {
                     HookState.armReentryGrace();
                     log("Prepared continuity overlay for screenshot reentry");
                 } else {
-                    HookState.clearSuppressNextShelfReset();
+                    HookState.clearReentryGrace();
+                    HookState.clearPreviewStack();
                 }
             }
         });
@@ -144,13 +169,25 @@ final class ScreenshotHooks {
                     log("Allowing ScreenshotWindow.removeWindow while continuity overlay is active");
                     return;
                 }
-                HookState.clearSuppressNextShelfReset();
+                HookState.clearReentryGrace();
             }
 
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
                 log("ScreenshotWindow.removeWindow called; clearing cached window");
                 HookState.clearScreenshotWindow(param.thisObject);
+                if (!HookState.isReentryGraceActive()) {
+                    HookState.clearPreviewStack();
+                    View shelfView = HookState.getScreenshotShelfView();
+                    if (shelfView != null) {
+                        shelfView.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                clearStackUi(shelfView);
+                            }
+                        });
+                    }
+                }
             }
         });
     }
@@ -197,6 +234,194 @@ final class ScreenshotHooks {
         }
         border.setBackgroundColor(Color.RED);
         log("screenshot_preview_border tinted red");
+    }
+
+    private static void updateStackUi(View shelfView) {
+        ViewGroup shelfStatic = findViewGroup(shelfView, "screenshot_static");
+        ImageView preview = findImageView(shelfView, "screenshot_preview");
+        ImageView previewBlur = findImageView(shelfView, "screenshot_preview_blur");
+        ImageView badge = findImageView(shelfView, "screenshot_badge");
+        if (shelfStatic == null || preview == null || previewBlur == null || badge == null) {
+            return;
+        }
+
+        clearSyntheticStackCards(shelfStatic);
+        List<Bitmap> stackBitmaps = HookState.getStackBitmaps();
+        if (stackBitmaps.isEmpty()) {
+            return;
+        }
+
+        applyStackCard(previewBlur, preview, stackBitmaps.get(0), 0);
+        if (stackBitmaps.size() > 1) {
+            addSyntheticStackCard(shelfStatic, previewBlur, preview, stackBitmaps.get(1), 1);
+        }
+
+        int totalCount = stackBitmaps.size() + (HookState.getLastPreviewBitmap() != null ? 1 : 0);
+        badge.setImageBitmap(createCountBadgeBitmap(badge, totalCount));
+        badge.setVisibility(totalCount > 1 ? View.VISIBLE : View.GONE);
+        badge.setContentDescription(totalCount + " screenshots");
+    }
+
+    private static void clearStackUi(View shelfView) {
+        ViewGroup shelfStatic = findViewGroup(shelfView, "screenshot_static");
+        ImageView previewBlur = findImageView(shelfView, "screenshot_preview_blur");
+        ImageView badge = findImageView(shelfView, "screenshot_badge");
+        if (shelfStatic != null) {
+            clearSyntheticStackCards(shelfStatic);
+        }
+        if (previewBlur != null) {
+            previewBlur.setImageDrawable(null);
+            previewBlur.setTranslationX(0.0f);
+            previewBlur.setTranslationY(0.0f);
+            previewBlur.setScaleX(1.0f);
+            previewBlur.setScaleY(1.0f);
+            previewBlur.setAlpha(1.0f);
+            previewBlur.setVisibility(View.INVISIBLE);
+        }
+        if (badge != null) {
+            badge.setImageDrawable(null);
+            badge.setVisibility(View.GONE);
+            badge.setContentDescription(null);
+        }
+    }
+
+    private static void clearSyntheticStackCards(ViewGroup shelfStatic) {
+        for (int i = shelfStatic.getChildCount() - 1; i >= 0; i--) {
+            View child = shelfStatic.getChildAt(i);
+            Object tag = child.getTag();
+            if (tag instanceof String && ((String) tag).startsWith(STACK_CARD_TAG_PREFIX)) {
+                shelfStatic.removeViewAt(i);
+            }
+        }
+    }
+
+    private static void addSyntheticStackCard(ViewGroup shelfStatic, View insertBefore, ImageView preview,
+            Bitmap bitmap, int depth) {
+        ImageView stackCard = new ImageView(shelfStatic.getContext());
+        stackCard.setTag(STACK_CARD_TAG_PREFIX + depth);
+        ViewGroup.LayoutParams layoutParams = cloneLayoutParams(preview.getLayoutParams());
+        if (layoutParams != null) {
+            stackCard.setLayoutParams(layoutParams);
+        }
+        applyPreviewBackground(preview, stackCard);
+        stackCard.setClipToOutline(preview.getClipToOutline());
+        applyStackCard(stackCard, preview, bitmap, depth);
+        int insertIndex = shelfStatic.indexOfChild(insertBefore);
+        shelfStatic.addView(stackCard, Math.max(0, insertIndex));
+    }
+
+    private static void applyStackCard(ImageView stackCard, ImageView preview, Bitmap bitmap, int depth) {
+        applyScreenshotBitmap(stackCard, bitmap);
+        stackCard.setAdjustViewBounds(true);
+        stackCard.setClickable(false);
+        stackCard.setVisibility(View.VISIBLE);
+        stackCard.setAlpha(depth == 0 ? 0.92f : 0.78f);
+        stackCard.setScaleX(depth == 0 ? 0.985f : 0.97f);
+        stackCard.setScaleY(depth == 0 ? 0.985f : 0.97f);
+        stackCard.setTranslationX(dp(stackCard, STACK_CARD_X_OFFSET_DP) * (depth + 1));
+        stackCard.setTranslationY(-dp(stackCard, STACK_CARD_Y_OFFSET_DP) * (depth + 1));
+        stackCard.setElevation(Math.max(0.0f, preview.getElevation() - (depth + 1)));
+    }
+
+    private static void applyPreviewBackground(ImageView preview, ImageView target) {
+        if (preview.getBackground() == null || preview.getBackground().getConstantState() == null) {
+            return;
+        }
+        target.setBackground(preview.getBackground().getConstantState().newDrawable().mutate());
+    }
+
+    private static void applyScreenshotBitmap(ImageView imageView, Bitmap bitmap) {
+        imageView.setImageBitmap(bitmap);
+        boolean portrait = bitmap.getWidth() < bitmap.getHeight();
+        int overlayScale = getSystemUiDimensionPixelSize(imageView, "overlay_x_scale", 240.0f);
+        ViewGroup.LayoutParams layoutParams = imageView.getLayoutParams();
+        if (layoutParams == null) {
+            layoutParams = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        if (portrait) {
+            layoutParams.width = overlayScale;
+            layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            imageView.setScaleType(ImageView.ScaleType.FIT_START);
+        } else {
+            layoutParams.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            layoutParams.height = overlayScale;
+            imageView.setScaleType(ImageView.ScaleType.FIT_END);
+        }
+        imageView.setLayoutParams(layoutParams);
+        imageView.requestLayout();
+    }
+
+    private static ViewGroup.LayoutParams cloneLayoutParams(ViewGroup.LayoutParams source) {
+        if (source == null) {
+            return null;
+        }
+        try {
+            return (ViewGroup.LayoutParams) source.getClass().getConstructor(source.getClass()).newInstance(source);
+        } catch (Throwable ignored) {
+        }
+        try {
+            return (ViewGroup.LayoutParams) source.getClass().getConstructor(ViewGroup.LayoutParams.class)
+                    .newInstance(source);
+        } catch (Throwable ignored) {
+        }
+        return new ViewGroup.LayoutParams(source.width, source.height);
+    }
+
+    private static ViewGroup findViewGroup(View root, String idName) {
+        int id = root.getResources().getIdentifier(idName, "id", "com.android.systemui");
+        View found = id == 0 ? null : root.findViewById(id);
+        if (found instanceof ViewGroup) {
+            return (ViewGroup) found;
+        }
+        return null;
+    }
+
+    private static ImageView findImageView(View root, String idName) {
+        int id = root.getResources().getIdentifier(idName, "id", "com.android.systemui");
+        View found = id == 0 ? null : root.findViewById(id);
+        if (found instanceof ImageView) {
+            return (ImageView) found;
+        }
+        return null;
+    }
+
+    private static Bitmap createCountBadgeBitmap(ImageView badge, int totalCount) {
+        int width = Math.max(1, badge.getWidth() > 0 ? badge.getWidth() : dp(badge, 56f));
+        int height = Math.max(1, badge.getHeight() > 0 ? badge.getHeight() : dp(badge, 56f));
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+
+        float radius = Math.min(width, height) / 2f;
+        Paint circle = new Paint(Paint.ANTI_ALIAS_FLAG);
+        circle.setColor(Color.parseColor("#D32F2F"));
+        canvas.drawCircle(width / 2f, height / 2f, radius, circle);
+
+        Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+        text.setColor(Color.WHITE);
+        text.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(height * (totalCount >= 10 ? 0.34f : 0.45f));
+
+        Paint.FontMetrics metrics = text.getFontMetrics();
+        float baseline = (height / 2f) - ((metrics.ascent + metrics.descent) / 2f);
+        canvas.drawText(String.valueOf(totalCount), width / 2f, baseline, text);
+        return bitmap;
+    }
+
+    private static int dp(View view, float dp) {
+        return Math.round(dp * view.getResources().getDisplayMetrics().density);
+    }
+
+    private static int getSystemUiDimensionPixelSize(View view, String name, float fallbackDp) {
+        int dimenId = view.getResources().getIdentifier(name, "dimen", "com.android.systemui");
+        if (dimenId != 0) {
+            try {
+                return view.getResources().getDimensionPixelSize(dimenId);
+            } catch (Throwable ignored) {
+            }
+        }
+        return dp(view, fallbackDp);
     }
 
     private static void forcePreviewVisible(Object proxy) {
@@ -314,7 +539,7 @@ final class ScreenshotHooks {
         View overlay = HookState.getContinuityOverlayView();
         WindowManager windowManager = HookState.getContinuityOverlayWindowManager();
         HookState.clearContinuityOverlay();
-        HookState.clearSuppressNextShelfReset();
+        HookState.clearReentryGrace();
         if (overlay == null || windowManager == null) {
             return;
         }

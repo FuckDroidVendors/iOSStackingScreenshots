@@ -18,9 +18,13 @@
 - Verify visually on-device that the previous screenshot shelf remains continuously visible during screenshot N+1, not only that it is absent from the saved file.
 - Verify whether the continuity overlay fully eliminates the visible blink for both hardware-key and three-finger screenshot entry paths.
 - If any blink remains, move the continuity snapshot earlier or seed it from a cached previous shelf snapshot instead of waiting for reentry-time `PixelCopy`.
+- Verify on-device that the stacked shelf renders correctly for 2-shot and 3-shot bursts, including the count badge and rear-card offsets.
+- Decide the first batch interaction model for the stacked shelf:
+  - tap/edit/share latest screenshot only
+  - or add explicit batch-aware affordances
 - Determine whether excluding the whole `ScreenshotUI` window removes any stock controls that should remain in the final UX.
 - Convert the current proof-of-concept module into a cleaner LSPosed package structure with configuration and safer runtime guards.
-- Decide whether the continuity-overlay approach should replace the earlier targeted `reset()` suppression entirely.
+- Decide whether to delete the remaining `reset()` diagnostic hook now that continuity overlay and stacked-shelf rendering are the primary UX path.
 - Investigate whether Android 14+ app-window sharing is useful for a scoped variant that captures only the selected app window.
 - Inspect AOSP/SystemUI screenshot flow in more detail and identify the smallest privileged patch that excludes the thumbnail overlay layer.
 - Decide target product model:

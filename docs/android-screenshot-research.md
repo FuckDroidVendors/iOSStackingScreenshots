@@ -47,11 +47,15 @@
   - on a rapid follow-up screenshot while the previous shelf is still visible, `PhoneWindow.getRootSurfaceControl()` returns a live attached root and the hook can call `setExcludeLayers(...)`
   - two saved screenshots from that repeated-shot test were byte-identical, which strongly indicates the previous visible screenshot shelf was excluded from the second saved image
   - the visible shelf-clearing problem comes from `ScreenshotController.handleScreenshot(...)` calling `ScreenshotShelfViewProxy.reset()` before the new screenshot is fully ready
-  - a targeted one-shot suppression of that reset during screenshot reentry is now implemented in the LSPosed module
-  - a newer continuity-overlay prototype is also implemented:
+  - the current UX mitigation path is:
     - on screenshot N+1, the module snapshots screenshot N's currently visible shelf with `PixelCopy`
     - it displays that snapshot in a temporary transparent overlay positioned over the original shelf
-    - this is intended to cover the stock teardown/rebuild gap even if reset suppression alone is not visually sufficient
+    - this covers the stock teardown/rebuild gap while the new shelf is prepared underneath
+  - a stacked-shelf prototype is also now implemented inside the stock shelf:
+    - `screenshot_preview_blur` is reused as the first rear card
+    - one extra synthetic rear card is inserted behind it for 3-shot bursts
+    - `screenshot_badge` is repurposed as a count badge while the batch is active
+    - the stack survives stock `removeWindow()` during screenshot reentry and resets on non-reentry dismissal/timeout
   - LSPosed logs on-device confirm that the continuity overlay is added during screenshot N+1 on this ROM
 
 ## Existing Reference
@@ -166,8 +170,8 @@
 - Keep the secure-overlay test as a fallback, not the primary plan.
 - Inspect the real crDroid/Lineage `SystemUI.apk` to confirm whether AOSP class names still match the expected Android 15 pipeline.
 - Next concrete check: inspect framework and services jars on-device to see which window types or titles can be excluded through the window manager capture path, and whether `ScreenshotUI` can be filtered wholesale.
-- Next concrete implementation task: determine the exact hidden API path from the attached screenshot decor view to its `SurfaceControl` in the screenshot process, then test `setExcludeLayers(...)` there before attempting any system_server hook.
 - Next concrete implementation task: harden the prototype for production use, reduce diagnostic logging, and verify the remaining UX requirement that the previous shelf stays continuously visible with no blink during screenshot N+1.
+- Next concrete implementation task: validate the new stacked-shelf rendering on-device for 2-shot and 3-shot bursts and decide the first batch interaction model.
 
 ## Sources
 - Android Developers: Media projection

@@ -136,16 +136,18 @@
 - Step 8 is partially validated:
   - repeated screenshot capture used the attached previous `ScreenshotUI` surface
   - the saved screenshot pair from that test was byte-identical
-- A first UX-focused reentry fix is now in place:
-  - `ScreenshotController.handleScreenshot(...)` reentry arms a one-shot suppression of `ScreenshotShelfViewProxy.reset()`
-  - on rapid screenshot N+1, that suppression fires while excluded-layer capture still works
-  - immediate teardown was not observed in logs; `removeWindow()` happened later on normal timeout
-- A second UX-focused reentry fix is now prototyped:
+- The current UX-focused reentry fix is:
   - on screenshot N+1, capture the visible screenshot shelf with `PixelCopy`
   - place that snapshot into a short-lived continuity overlay window at the same bounds
   - let stock SystemUI tear down and rebuild underneath while the user keeps seeing the old shelf snapshot
+- A first stacked-shelf prototype now rides on top of that continuity path:
+  - reuse `R.id.screenshot_preview_blur` as the first rear card
+  - add one synthetic rear card for 3-shot bursts
+  - replace the stock badge slot with a numeric batch badge while the stack is active
+  - preserve the batch across stock `ScreenshotWindow.removeWindow()` during screenshot reentry
 - Remaining validation:
   - visually confirm there is no blink on the physical display during screenshot N+1
+  - visually confirm the stacked shelf looks correct for 2-shot and 3-shot bursts
   - check whether excluding the whole `ScreenshotUI` window removes any stock controls that should remain
 
 ## Validation Criteria

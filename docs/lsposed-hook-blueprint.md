@@ -130,11 +130,15 @@ hook(ImageCaptureImpl.captureDisplay) {
   - screenshot N cannot exclude its own freshly-created shelf because that shelf is not attached yet
   - screenshot N+1 can exclude screenshot N's already-attached `ScreenshotUI` surface
 - Repeated-shot saved files from the device were byte-identical while the second shot used `setExcludeLayers(...)`, which strongly indicates the visible prior shelf was excluded successfully.
-- Reentry UX mitigation is now implemented:
-  - if screenshot N's shelf is still attached when `handleScreenshot(...)` begins for screenshot N+1, the next `ScreenshotShelfViewProxy.reset()` is suppressed once
-  - this is intended to keep screenshot N visible until screenshot N+1 is ready instead of clearing the shelf immediately
-- A newer continuity-overlay mitigation is also prototyped:
+- Reentry UX mitigation now uses a continuity overlay:
   - on screenshot N+1, use `PixelCopy` to snapshot the visible old shelf
   - add a temporary transparent overlay window at the same position
   - remove it shortly after the new shelf is ready
-- The remaining unverified piece is still UX-level: confirm on the physical display that the shelf never visually blinks during screenshot N+1 for both hardware-key and gesture screenshot paths.
+- A stacked-shelf prototype is also now implemented in the stock shelf:
+  - reuse `screenshot_preview_blur` as the first rear card
+  - add one synthetic rear card for 3-shot bursts
+  - repurpose `screenshot_badge` as a numeric count badge while the batch is active
+  - preserve the batch across stock `removeWindow()` during screenshot reentry
+- The remaining unverified pieces are still UX-level:
+  - confirm on the physical display that the shelf never visually blinks during screenshot N+1 for both hardware-key and gesture screenshot paths
+  - confirm that the stacked shelf looks correct for 2-shot and 3-shot bursts

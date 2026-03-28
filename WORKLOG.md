@@ -111,3 +111,12 @@
   - `Continuity overlay added` fired
   - the overlay was later removed on its timeout
 - The visual result on the physical display still needs user confirmation; the reentry animation bypass log has not yet been observed on this ROM.
+- Reworked the first stacked-shelf patch to avoid an AndroidX/class-loader dependency inside the LSPosed module.
+- Kept the stack inside the stock shelf by reusing:
+  - `R.id.screenshot_preview_blur` as the first rear card
+  - `R.id.screenshot_badge` as the count badge slot
+  - one synthetic extra rear `ImageView` inserted with runtime-cloned layout params for 3-shot bursts
+- Changed stack accumulation to happen only during actual screenshot reentry, which prevents stale screenshots from leaking into a new batch after timeout or dismissal.
+- Changed stack storage to keep bounded, downscaled bitmap copies instead of strong references to full screenshot bitmaps in the SystemUI screenshot process.
+- Fixed the batch lifecycle so the preview stack survives `ScreenshotWindow.removeWindow()` during reentry and only clears on non-reentry dismissal/timeout.
+- Verified the updated module builds successfully with Gradle 8.13 via `:app:assembleDebug`.
