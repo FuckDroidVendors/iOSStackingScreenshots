@@ -14,6 +14,8 @@
   - black inner fill behind the actual screenshot content
 - This change applies to both the main front thumbnail and the composed stacked-card bitmaps, so alpha/empty regions should now read as black instead of leaking white through the body of the card.
 - Rebuilt the LSPosed module with `./gradlew assembleDebug`, installed the updated APK to `192.168.2.56:5555`, and restarted `SystemUI`.
+- Followed up on residual alpha bleed between stacked cards by making the card frame drawable fully opaque:
+  - added a black base layer under the white frame so rounded corners no longer remain transparent
 
 ## 2026-03-28
 - Re-checked repository state before work. Untracked device artifacts remain:

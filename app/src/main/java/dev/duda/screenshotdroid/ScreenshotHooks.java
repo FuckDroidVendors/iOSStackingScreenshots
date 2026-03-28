@@ -530,6 +530,11 @@ final class ScreenshotHooks {
         float outerRadius = dp(view, 2.0f);
         float innerRadius = Math.max(0.0f, outerRadius - inset);
 
+        GradientDrawable base = new GradientDrawable();
+        base.setShape(GradientDrawable.RECTANGLE);
+        base.setColor(IOS_CARD_BACKGROUND_COLOR);
+        base.setCornerRadius(outerRadius);
+
         GradientDrawable outer = new GradientDrawable();
         outer.setShape(GradientDrawable.RECTANGLE);
         outer.setColor(IOS_FRAME_COLOR);
@@ -541,8 +546,8 @@ final class ScreenshotHooks {
         inner.setColor(IOS_CARD_BACKGROUND_COLOR);
         inner.setCornerRadius(innerRadius);
 
-        LayerDrawable layers = new LayerDrawable(new Drawable[]{outer, inner});
-        layers.setLayerInset(1, inset, inset, inset, inset);
+        LayerDrawable layers = new LayerDrawable(new Drawable[]{base, outer, inner});
+        layers.setLayerInset(2, inset, inset, inset, inset);
         return layers;
     }
 
