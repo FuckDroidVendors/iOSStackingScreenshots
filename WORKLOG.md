@@ -120,3 +120,10 @@
 - Changed stack storage to keep bounded, downscaled bitmap copies instead of strong references to full screenshot bitmaps in the SystemUI screenshot process.
 - Fixed the batch lifecycle so the preview stack survives `ScreenshotWindow.removeWindow()` during reentry and only clears on non-reentry dismissal/timeout.
 - Verified the updated module builds successfully with Gradle 8.13 via `:app:assembleDebug`.
+- Iterated on the screenshot shelf card rendering and placement on-device:
+  - replaced mismatched frame/background composition with composed framed card bitmaps so visible border width is controlled directly
+  - unified the visible rear-card path so the 2nd screenshot uses the same overlay-based renderer as the 3rd
+  - removed the extra delayed stack reapply that was snapping the stack back toward the lower-left after initial placement
+  - diagnosed the false "can't take screenshots" error as a crash in `createCardBitmap(...)` after capture had already succeeded and the file had already been saved
+  - fixed that crash by converting hardware preview bitmaps before drawing them into software-backed framed card bitmaps
+  - current visual state: 2-shot stacking is aligned with the 3-shot renderer, and screenshot capture no longer fails due to the composed-frame path

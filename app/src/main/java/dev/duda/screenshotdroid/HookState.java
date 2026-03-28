@@ -3,6 +3,7 @@ package dev.duda.screenshotdroid;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.util.Log;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +11,7 @@ import android.view.View;
 import android.view.WindowManager;
 
 final class HookState {
+    private static final String TAG = "ScreenshotDroid";
     private static final long REENTRY_GRACE_MS = 1500L;
     private static final int MAX_STACK_BITMAPS = 3;
     private static final int MAX_STACK_EDGE_PX = 640;
@@ -21,7 +23,7 @@ final class HookState {
     private static volatile WeakReference<View> continuityOverlayViewRef = new WeakReference<>(null);
     private static volatile WeakReference<WindowManager> continuityOverlayWindowManagerRef =
             new WeakReference<>(null);
-    private static volatile WeakReference<Bitmap> lastPreviewBitmapRef = new WeakReference<>(null);
+    private static volatile Bitmap lastPreviewBitmap;
     private static final ArrayList<Bitmap> previewStack = new ArrayList<>();
     private static volatile long reentryArmedAtMs;
 
@@ -70,18 +72,25 @@ final class HookState {
     }
 
     static void setLastPreviewBitmap(Bitmap bitmap) {
-        lastPreviewBitmapRef = new WeakReference<>(bitmap);
+        lastPreviewBitmap = bitmap;
     }
 
     static Bitmap getLastPreviewBitmap() {
-        return lastPreviewBitmapRef.get();
+        return lastPreviewBitmap;
     }
 
     static synchronized void pushStackBitmap(Bitmap bitmap) {
-        Bitmap stackBitmap = createStackBitmap(bitmap);
-        if (stackBitmap == null) {
+        if (bitmap == null) {
+            Log.i(TAG, "pushStackBitmap: source bitmap was null");
             return;
         }
+        Log.i(TAG, "pushStackBitmap: source=" + describeBitmap(bitmap));
+        Bitmap stackBitmap = createStackBitmap(bitmap);
+        if (stackBitmap == null) {
+            Log.i(TAG, "pushStackBitmap: failed to create stack bitmap");
+            return;
+        }
+        Log.i(TAG, "pushStackBitmap: stored=" + describeBitmap(stackBitmap));
         previewStack.add(0, stackBitmap);
         while (previewStack.size() > MAX_STACK_BITMAPS) {
             recycleBitmap(previewStack.remove(previewStack.size() - 1));
@@ -97,6 +106,7 @@ final class HookState {
             recycleBitmap(bitmap);
         }
         previewStack.clear();
+        lastPreviewBitmap = null;
     }
 
     static void armReentryGrace() {
@@ -141,13 +151,36 @@ final class HookState {
         int width = Math.max(1, Math.round(bitmap.getWidth() * scale));
         int height = Math.max(1, Math.round(bitmap.getHeight() * scale));
         try {
+            Bitmap safeBitmap = bitmap;
+            if (bitmap.getConfig() == Bitmap.Config.HARDWARE) {
+                safeBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false);
+                if (safeBitmap == null) {
+                    Log.i(TAG, "createStackBitmap: hardware copy returned null");
+                    return null;
+                }
+            }
+            if (safeBitmap.getWidth() == width && safeBitmap.getHeight() == height
+                    && safeBitmap.getConfig() == Bitmap.Config.ARGB_8888 && !safeBitmap.isMutable()) {
+                return safeBitmap;
+            }
             Bitmap copy = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(copy);
-            canvas.drawBitmap(bitmap, null, new android.graphics.Rect(0, 0, width, height), STACK_BITMAP_PAINT);
+            canvas.drawBitmap(safeBitmap, null, new android.graphics.Rect(0, 0, width, height), STACK_BITMAP_PAINT);
             return copy;
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            Log.i(TAG, "createStackBitmap: failed for " + describeBitmap(bitmap) + " error=" + t);
             return null;
         }
+    }
+
+    private static String describeBitmap(Bitmap bitmap) {
+        if (bitmap == null) {
+            return "null";
+        }
+        return bitmap.getWidth() + "x" + bitmap.getHeight()
+                + " config=" + bitmap.getConfig()
+                + " mutable=" + bitmap.isMutable()
+                + " recycled=" + bitmap.isRecycled();
     }
 
     private static void recycleBitmap(Bitmap bitmap) {
