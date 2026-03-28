@@ -10,17 +10,14 @@
 - Prototype a visible "hook active" cue by recoloring the screenshot preview border to red inside SystemUI's screenshot shelf.
 - Inspect `framework.jar` / `services.jar` from the device to find the cleanest exclusion path for the screenshot window type used by SystemUI.
 - Determine whether excluding the whole `ScreenshotUI` window is sufficient, or whether a child surface from the screenshot shelf must be excluded instead.
-- Build the first LSPosed proof-of-life hook in the `com.android.systemui:screenshot` process:
-  - log `ImageCaptureImpl.captureDisplay(...)`
-  - recolor `screenshot_preview_border`
-  - identify the `ScreenshotWindow` / title / type at runtime
 - Resolve how to obtain the live `SurfaceControl` for the attached `ScreenshotWindow` decor view from the SystemUI screenshot process.
 - Prototype replacing `ImageCaptureImpl.captureDisplay(...)` with a call that adds `setExcludeLayers(...)` for the screenshot UI surface.
 - Validate whether excluding only the screenshot window surface removes the floating preview while preserving underlying app pixels.
 - Convert [docs/lsposed-hook-blueprint.md](/home/duda/screenshotdroid/docs/lsposed-hook-blueprint.md) into a minimal LSPosed module skeleton.
-- Install the built module on-device, enable it for `com.android.systemui`, and verify the red border proof-of-life hook.
-- Capture LSPosed logs while taking screenshots to verify `ImageCaptureImpl.captureDisplay(...)` interception.
-- Verify whether `setExcludeLayers(...)` on the `captureDisplay(...)` path actually removes the screenshot shelf from subsequent captures on crDroid 15.
+- Trim diagnostic logging down to the minimum needed once the prototype behavior is stable.
+- Verify visually on-device that the previous screenshot shelf remains continuously visible during screenshot N+1, not only that it is absent from the saved file.
+- Determine whether excluding the whole `ScreenshotUI` window removes any stock controls that should remain in the final UX.
+- Convert the current proof-of-concept module into a cleaner LSPosed package structure with configuration and safer runtime guards.
 - Investigate whether Android 14+ app-window sharing is useful for a scoped variant that captures only the selected app window.
 - Inspect AOSP/SystemUI screenshot flow in more detail and identify the smallest privileged patch that excludes the thumbnail overlay layer.
 - Decide target product model:

@@ -40,9 +40,11 @@ final class ScreenshotHooks {
             protected void afterHookedMethod(MethodHookParam param) {
                 View shelfView = (View) ReflectionHelpers.getObjectFieldIfExists(param.thisObject, "view");
                 if (shelfView == null) {
+                    log("ScreenshotShelfViewProxy constructed but view field was null");
                     return;
                 }
                 HookState.setScreenshotShelfView(shelfView);
+                log("ScreenshotShelfViewProxy constructed; tinting preview border");
                 tintPreviewBorder(shelfView);
             }
         });
@@ -62,6 +64,8 @@ final class ScreenshotHooks {
                 if (screenshotWindow != null) {
                     HookState.setScreenshotWindow(screenshotWindow);
                     log("cached ScreenshotWindow from ScreenshotController");
+                } else {
+                    log("ScreenshotController constructed but window field was null");
                 }
             }
         });
@@ -77,6 +81,7 @@ final class ScreenshotHooks {
         XposedBridge.hookAllMethods(windowClass, "removeWindow", new XC_MethodHook() {
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
+                log("ScreenshotWindow.removeWindow called; clearing cached window");
                 HookState.clearScreenshotWindow(param.thisObject);
             }
         });
@@ -93,8 +98,10 @@ final class ScreenshotHooks {
                 new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        log("ImageCaptureImpl.captureDisplay called");
                         Object screenshotSurface = resolveScreenshotSurface();
                         if (screenshotSurface == null) {
+                            log("No screenshot surface available; falling back to original capture");
                             return;
                         }
                         Integer displayId = (Integer) param.args[0];
@@ -121,45 +128,102 @@ final class ScreenshotHooks {
             return;
         }
         border.setBackgroundColor(Color.RED);
+        log("screenshot_preview_border tinted red");
     }
 
     private static Object resolveScreenshotSurface() {
         Object screenshotWindow = HookState.getScreenshotWindow();
         if (screenshotWindow == null) {
+            log("resolveScreenshotSurface: no cached ScreenshotWindow");
             return null;
         }
 
         Object phoneWindow = ReflectionHelpers.getObjectFieldIfExists(screenshotWindow, "window");
+        if (phoneWindow == null) {
+            log("resolveScreenshotSurface: ScreenshotWindow.window was null");
+            return null;
+        }
         Object attachedSurfaceControl = ReflectionHelpers.callMethodIfExists(phoneWindow,
                 "getRootSurfaceControl");
+        if (attachedSurfaceControl != null) {
+            log("resolveScreenshotSurface: got root surface from PhoneWindow: "
+                    + attachedSurfaceControl.getClass().getName());
+            Object directSurface = ReflectionHelpers.callMethodIfExists(attachedSurfaceControl,
+                    "getSurfaceControl");
+            if (isValidSurface(directSurface)) {
+                log("resolveScreenshotSurface: got SurfaceControl directly from attached root surface");
+                return directSurface;
+            }
+        }
 
         if (attachedSurfaceControl == null) {
             View shelfView = HookState.getScreenshotShelfView();
             if (shelfView != null) {
+                log("resolveScreenshotSurface: shelf view attached=" + shelfView.isAttachedToWindow());
                 attachedSurfaceControl = ReflectionHelpers.callMethodIfExists(shelfView,
                         "getRootSurfaceControl");
+                if (attachedSurfaceControl != null) {
+                    log("resolveScreenshotSurface: got root surface from screenshot shelf view: "
+                            + attachedSurfaceControl.getClass().getName());
+                    Object directSurface = ReflectionHelpers.callMethodIfExists(attachedSurfaceControl,
+                            "getSurfaceControl");
+                    if (isValidSurface(directSurface)) {
+                        log("resolveScreenshotSurface: got SurfaceControl from screenshot shelf root surface");
+                        return directSurface;
+                    }
+                }
+            } else {
+                log("resolveScreenshotSurface: no cached screenshot shelf view");
             }
         }
 
-        if (attachedSurfaceControl == null && phoneWindow != null) {
-            View decorView = (View) ReflectionHelpers.callMethodIfExists(phoneWindow, "getDecorView");
-            if (decorView != null) {
+        View decorView = (View) ReflectionHelpers.callMethodIfExists(phoneWindow, "peekDecorView");
+        if (decorView == null) {
+            decorView = (View) ReflectionHelpers.callMethodIfExists(phoneWindow, "getDecorView");
+        }
+        if (decorView != null) {
+            log("resolveScreenshotSurface: decor view attached=" + decorView.isAttachedToWindow());
+            Object viewRootImpl = ReflectionHelpers.callMethodIfExists(decorView, "getViewRootImpl");
+            if (viewRootImpl != null) {
+                log("resolveScreenshotSurface: decor view root=" + viewRootImpl.getClass().getName());
+                Object directSurface = ReflectionHelpers.callMethodIfExists(viewRootImpl, "getSurfaceControl");
+                if (isValidSurface(directSurface)) {
+                    log("resolveScreenshotSurface: got SurfaceControl from ViewRootImpl.getSurfaceControl()");
+                    return directSurface;
+                }
+                directSurface = ReflectionHelpers.getObjectFieldIfExists(viewRootImpl, "mSurfaceControl");
+                if (isValidSurface(directSurface)) {
+                    log("resolveScreenshotSurface: got direct mSurfaceControl from ViewRootImpl");
+                    return directSurface;
+                }
+            } else {
+                log("resolveScreenshotSurface: decor view has no ViewRootImpl");
+            }
+
+            if (attachedSurfaceControl == null) {
                 attachedSurfaceControl = ReflectionHelpers.callMethodIfExists(decorView,
                         "getRootSurfaceControl");
-                if (attachedSurfaceControl == null) {
-                    Object viewRootImpl = ReflectionHelpers.callMethodIfExists(decorView, "getViewRootImpl");
-                    Object directSurface = ReflectionHelpers.getObjectFieldIfExists(viewRootImpl, "mSurfaceControl");
+                if (attachedSurfaceControl != null) {
+                    log("resolveScreenshotSurface: got root surface from decor view: "
+                            + attachedSurfaceControl.getClass().getName());
+                    Object directSurface = ReflectionHelpers.callMethodIfExists(attachedSurfaceControl,
+                            "getSurfaceControl");
                     if (isValidSurface(directSurface)) {
+                        log("resolveScreenshotSurface: got SurfaceControl from decor root surface");
                         return directSurface;
                     }
                 }
             }
+        } else {
+            log("resolveScreenshotSurface: no decor view available");
         }
 
         Object rootSurface = ReflectionHelpers.getObjectFieldIfExists(attachedSurfaceControl, "mSurfaceControl");
         if (isValidSurface(rootSurface)) {
+            log("resolveScreenshotSurface: extracted valid mSurfaceControl from AttachedSurfaceControl");
             return rootSurface;
         }
+        log("resolveScreenshotSurface: no valid surface control found");
         return null;
     }
 
@@ -193,6 +257,7 @@ final class ScreenshotHooks {
 
             Object buffer = XposedHelpers.callMethod(listener, "getBuffer");
             if (buffer == null) {
+                log("capture interception returned null buffer");
                 return null;
             }
             log("captureDisplay intercepted with excluded screenshot surface");

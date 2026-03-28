@@ -39,6 +39,13 @@
   - `DisplayContent.getLayerCaptureArgs(Set<Integer>)` excludes windows by type by collecting their `SurfaceControl`s
   - `WindowManagerService.takeAssistScreenshot(Set<Integer>)` feeds that exclusion set into layer capture
   - `IWindowManager` does not directly expose `takeAssistScreenshot(Set<Integer>)`
+- On-device LSPosed prototype results confirm:
+  - the module loads in `com.android.systemui:screenshot`
+  - `ScreenshotShelfViewProxy` can recolor `screenshot_preview_border` red
+  - `ImageCaptureImpl.captureDisplay(...)` can be intercepted successfully
+  - on the first screenshot, the screenshot shelf is not yet attached when capture runs
+  - on a rapid follow-up screenshot while the previous shelf is still visible, `PhoneWindow.getRootSurfaceControl()` returns a live attached root and the hook can call `setExcludeLayers(...)`
+  - two saved screenshots from that repeated-shot test were byte-identical, which strongly indicates the previous visible screenshot shelf was excluded from the second saved image
 
 ## Existing Reference
 - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c) shows the X11/compositor-style solution already used elsewhere.
@@ -104,6 +111,7 @@
 - For Android 15 specifically, the likely hook surface is SystemUI's screenshot pipeline rather than the older pre-refactor controller classes.
 - On this specific build, the `com.android.systemui:screenshot` process is the primary hook target.
 - The lowest-risk first prototype is now: hook the screenshot process only, fetch the screenshot window's live `SurfaceControl`, and inject it into `CaptureArgs.setExcludeLayers(...)` before calling the existing `IWindowManager.captureDisplay(...)`.
+- The prototype has now validated that this works for screenshot N+1 on crDroid 15 when the prior screenshot shelf is already attached.
 
 ## Architecture Options
 
@@ -147,10 +155,12 @@
 - Build a tiny rooted spike that proves one of these:
   - an LSPosed hook can exclude a known overlay layer from capture
   - a Shizuku-backed privileged call can capture while excluding that layer
+- This LSPosed proof now exists for the stock `ScreenshotUI` window on screenshot N+1.
 - Keep the secure-overlay test as a fallback, not the primary plan.
 - Inspect the real crDroid/Lineage `SystemUI.apk` to confirm whether AOSP class names still match the expected Android 15 pipeline.
 - Next concrete check: inspect framework and services jars on-device to see which window types or titles can be excluded through the window manager capture path, and whether `ScreenshotUI` can be filtered wholesale.
 - Next concrete implementation task: determine the exact hidden API path from the attached screenshot decor view to its `SurfaceControl` in the screenshot process, then test `setExcludeLayers(...)` there before attempting any system_server hook.
+- Next concrete implementation task: harden the prototype for production use, reduce diagnostic logging, and verify the remaining UX requirement that the previous shelf stays continuously visible with no blink during screenshot N+1.
 
 ## Sources
 - Android Developers: Media projection

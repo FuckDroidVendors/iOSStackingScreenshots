@@ -122,3 +122,12 @@ hook(ImageCaptureImpl.captureDisplay) {
 - The red border appears around the screenshot preview.
 - Screenshot N+1 does not contain the visible screenshot preview from screenshot N.
 - The preview does not blink or disappear during repeated screenshots.
+
+## Prototype Status On crDroid 15
+- Red-border proof-of-life is confirmed.
+- `ImageCaptureImpl.captureDisplay(...)` interception is confirmed.
+- Surface timing behavior is now understood:
+  - screenshot N cannot exclude its own freshly-created shelf because that shelf is not attached yet
+  - screenshot N+1 can exclude screenshot N's already-attached `ScreenshotUI` surface
+- Repeated-shot saved files from the device were byte-identical while the second shot used `setExcludeLayers(...)`, which strongly indicates the visible prior shelf was excluded successfully.
+- The remaining unverified piece is purely UX-level: confirm on the physical display that the shelf never visually blinks during screenshot N+1.

@@ -53,6 +53,13 @@
 - `ScreenCapture.CaptureArgs.Builder.setExcludeLayers(...)` is present in the device framework.
 - `DisplayContent.getLayerCaptureArgs(Set<Integer>)` excludes windows by collecting matching windows' `SurfaceControl`s.
 - `IWindowManager` does not directly expose the typed `takeAssistScreenshot(Set<Integer>)` path; it does expose `captureDisplay(...)`.
+- Live-device prototype findings:
+  - the LSPosed module loads in `com.android.systemui:screenshot`
+  - `ScreenshotShelfViewProxy` border recolor works
+  - on screenshot N, the new screenshot shelf is not yet attached when `captureDisplay(...)` runs
+  - on screenshot N+1, the previous screenshot shelf is attached and reachable through `PhoneWindow.getRootSurfaceControl()`
+  - the hook can rebuild capture args with `setExcludeLayers(...)` and successfully intercept `captureDisplay(...)`
+  - the saved outputs from the repeated-shot test were byte-identical, strongly indicating the previous screenshot shelf was excluded from screenshot N+1
 
 ## Hook Candidates
 
@@ -124,6 +131,15 @@
 7. Call the existing `IWindowManager.captureDisplay(...)`.
 8. Validate repeated screenshots while the previous preview remains visible.
 
+## Current Prototype Status
+- Steps 1 through 7 are now implemented in the LSPosed proof-of-concept module.
+- Step 8 is partially validated:
+  - repeated screenshot capture used the attached previous `ScreenshotUI` surface
+  - the saved screenshot pair from that test was byte-identical
+- Remaining validation:
+  - visually confirm there is no blink on the physical display during screenshot N+1
+  - check whether excluding the whole `ScreenshotUI` window removes any stock controls that should remain
+
 ## Validation Criteria
 - Taking screenshot N+1 does not visually hide screenshot N's preview.
 - Screenshot N+1 does not contain screenshot N's preview.
@@ -141,4 +157,5 @@
 ## Immediate Next Step
 - `SystemUI.apk` inspection is done.
 - Framework/services inspection is done.
-- Next: find the exact hidden API chain from the screenshot window's attached view to its `SurfaceControl`, then build the first LSPosed module around that.
+- First LSPosed module is built and verified on-device.
+- Next: polish the prototype into a more robust module and validate the remaining UX details on the physical display.

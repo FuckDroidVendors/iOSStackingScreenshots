@@ -67,3 +67,20 @@
 - Added a repo-local Gradle wrapper.
 - Verified build success with `gradle assembleDebug`.
 - Built debug APK at [app/build/outputs/apk/debug/app-debug.apk](/home/duda/screenshotdroid/app/build/outputs/apk/debug/app-debug.apk).
+- Installed the LSPosed module on-device, enabled it for `com.android.systemui`, and confirmed LSPosed loads `dev.duda.screenshotdroid.HookEntry` in `com.android.systemui:screenshot`.
+- Confirmed on-device proof-of-life hooks:
+  - screenshot shelf border is recolored red
+  - `ImageCaptureImpl.captureDisplay(...)` interception runs
+- Narrowed the timing behavior:
+  - on screenshot N, the screenshot shelf is not yet attached when capture runs
+  - on screenshot N+1, the previous screenshot shelf is attached and its `SurfaceControl` is available from `PhoneWindow.getRootSurfaceControl()`
+- Updated the resolver to prefer the actual attached-view path on this ROM:
+  - `PhoneWindow.getRootSurfaceControl()`
+  - `ViewRootImpl.getSurfaceControl()`
+  - fallback `mSurfaceControl` reflection
+- Verified repeated-shot behavior with saved files:
+  - `Screenshot_20260328-022446_Apps2SD PRO.png`
+  - `Screenshot_20260328-022450_Apps2SD PRO.png`
+  - files were byte-identical (`sha256` and `cmp` matched)
+  - the second shot was taken during `captureDisplay intercepted with excluded screenshot surface`
+- Strong inference: on this ROM, excluding the prior `ScreenshotUI` surface from `captureDisplay(...)` successfully removes the visible previous screenshot shelf from the next saved screenshot.
