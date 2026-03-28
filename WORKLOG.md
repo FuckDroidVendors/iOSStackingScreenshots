@@ -1,5 +1,17 @@
 # Work Log
 
+## 2026-03-28
+- Re-checked repository state before work. Untracked device artifacts remain:
+  - [INFO](/home/duda/screenshotdroid/INFO)
+  - [SystemUI.apk](/home/duda/screenshotdroid/SystemUI.apk)
+  - [framework.jar](/home/duda/screenshotdroid/framework.jar)
+  - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c)
+  - [services.jar](/home/duda/screenshotdroid/services.jar)
+- Re-read the current project docs and rooted-hook implementation notes before touching the Android build/deploy flow.
+- Verified the current tree already builds successfully with `./gradlew assembleDebug`.
+- Confirmed the connected target device is still the rooted POCO F1 at `192.168.2.56:5555`.
+- Installed the current debug APK to the device with `adb -s 192.168.2.56:5555 install -r app/build/outputs/apk/debug/app-debug.apk`.
+
 ## 2026-03-27
 - Inspected repository state. Found only one untracked file: [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c).
 - Read the existing X11 compositor plugin as the conceptual reference: it keeps a thumbnail visible while excluding it during subsequent captures by controlling composition.
