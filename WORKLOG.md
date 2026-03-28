@@ -15,6 +15,10 @@
 - Fixed the draw order in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/dev/duda/screenshotdroid/ScreenshotHooks.java) by inserting rear-card overlay drawables from deepest/oldest to newest so the newer card remains visually on top.
 - Rebuilt the LSPosed module with `./gradlew assembleDebug`.
 - Installed the updated debug APK to the device and restarted `SystemUI` so the `com.android.systemui:screenshot` process would reload the hook.
+- Investigated a follow-up report that the second-newest screenshot still appeared on top immediately after capture.
+- Root cause: the continuity overlay was still showing a snapshot of the previous shelf for `1200 ms`, so it visually covered the freshly updated shelf even after the new screenshot had already been bound underneath.
+- Fixed the continuity-overlay handoff in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/dev/duda/screenshotdroid/ScreenshotHooks.java) so the old overlay is removed shortly after `setScreenshot(...)` updates the new preview, while keeping the longer timeout as a fallback safety path.
+- Rebuilt, reinstalled, and restarted `SystemUI` again so the new handoff behavior is live on-device.
 
 ## 2026-03-27
 - Inspected repository state. Found only one untracked file: [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c).

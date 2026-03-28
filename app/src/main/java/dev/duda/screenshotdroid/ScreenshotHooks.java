@@ -30,6 +30,7 @@ import de.robv.android.xposed.XposedHelpers;
 final class ScreenshotHooks {
     private static final String TAG = "ScreenshotDroid";
     private static final long CONTINUITY_OVERLAY_MS = 1200L;
+    private static final long CONTINUITY_HANDOFF_MS = 96L;
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final Paint CARD_BITMAP_PAINT =
             new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -117,6 +118,9 @@ final class ScreenshotHooks {
                 if (shelfView != null) {
                     hideShelfChrome(shelfView);
                     scheduleStackUiUpdate(shelfView);
+                }
+                if (HookState.getContinuityOverlayView() != null) {
+                    scheduleContinuityOverlayRemoval(CONTINUITY_HANDOFF_MS, false);
                 }
             }
         });
@@ -663,7 +667,7 @@ final class ScreenshotHooks {
                 location[1] + shelfView.getHeight());
         Bitmap snapshot = Bitmap.createBitmap(shelfView.getWidth(), shelfView.getHeight(), Bitmap.Config.ARGB_8888);
 
-        removeContinuityOverlay();
+        removeContinuityOverlay(false);
         android.view.Window window = (android.view.Window) phoneWindow;
         PixelCopy.request(window, sourceRect, snapshot, new PixelCopy.OnPixelCopyFinishedListener() {
             @Override
@@ -703,31 +707,34 @@ final class ScreenshotHooks {
         try {
             windowManager.addView(overlay, params);
             HookState.setContinuityOverlay(overlay, windowManager);
-            scheduleContinuityOverlayRemoval();
+            scheduleContinuityOverlayRemoval(CONTINUITY_OVERLAY_MS, true);
             log("Continuity overlay added");
         } catch (Throwable t) {
             log("Failed to add continuity overlay: " + t);
         }
     }
 
-    private static void scheduleContinuityOverlayRemoval() {
+    private static void scheduleContinuityOverlayRemoval(long delayMs, boolean clearReentryGrace) {
         if (continuityOverlayRemoval != null) {
             MAIN_HANDLER.removeCallbacks(continuityOverlayRemoval);
         }
+        final boolean shouldClearReentryGrace = clearReentryGrace;
         continuityOverlayRemoval = new Runnable() {
             @Override
             public void run() {
-                removeContinuityOverlay();
+                removeContinuityOverlay(shouldClearReentryGrace);
             }
         };
-        MAIN_HANDLER.postDelayed(continuityOverlayRemoval, CONTINUITY_OVERLAY_MS);
+        MAIN_HANDLER.postDelayed(continuityOverlayRemoval, delayMs);
     }
 
-    private static void removeContinuityOverlay() {
+    private static void removeContinuityOverlay(boolean clearReentryGrace) {
         View overlay = HookState.getContinuityOverlayView();
         WindowManager windowManager = HookState.getContinuityOverlayWindowManager();
         HookState.clearContinuityOverlay();
-        HookState.clearReentryGrace();
+        if (clearReentryGrace) {
+            HookState.clearReentryGrace();
+        }
         if (overlay == null || windowManager == null) {
             return;
         }
