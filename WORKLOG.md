@@ -17,6 +17,7 @@
 - Followed up on residual alpha bleed between stacked cards by making the card frame drawable fully opaque:
   - added a black base layer under the white frame so rounded corners no longer remain transparent
 - Forced the composed card bitmap content area to be opaque by pre-filling the screenshot draw rect with black before drawing the bitmap.
+- Tuned the card frame base layer to match the white frame fill to avoid dark halos at rounded corners while keeping the inner content rect black.
 
 ## 2026-03-28
 - Re-checked repository state before work. Untracked device artifacts remain:

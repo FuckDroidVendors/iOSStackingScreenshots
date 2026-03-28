@@ -537,7 +537,7 @@ final class ScreenshotHooks {
 
         GradientDrawable base = new GradientDrawable();
         base.setShape(GradientDrawable.RECTANGLE);
-        base.setColor(IOS_CARD_BACKGROUND_COLOR);
+        base.setColor(IOS_FRAME_COLOR);
         base.setCornerRadius(outerRadius);
 
         GradientDrawable outer = new GradientDrawable();
