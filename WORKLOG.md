@@ -7,6 +7,21 @@
   - [framework.jar](/home/duda/screenshotdroid/framework.jar)
   - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c)
   - [services.jar](/home/duda/screenshotdroid/services.jar)
+- Re-read the current project docs and rooted-hook implementation notes before touching the screenshot shelf renderer.
+- Investigated a visual defect in the screenshot thumbnail where transparent pixels in the preview were revealing the white frame background, most visibly along the right edge.
+- Fixed [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/dev/duda/screenshotdroid/ScreenshotHooks.java) by changing the shared card background helper from a fully white fill to a two-layer card:
+  - white outer frame and stroke
+  - black inner fill behind the actual screenshot content
+- This change applies to both the main front thumbnail and the composed stacked-card bitmaps, so alpha/empty regions should now read as black instead of leaking white through the body of the card.
+- Rebuilt the LSPosed module with `./gradlew assembleDebug`, installed the updated APK to `192.168.2.56:5555`, and restarted `SystemUI`.
+
+## 2026-03-28
+- Re-checked repository state before work. Untracked device artifacts remain:
+  - [INFO](/home/duda/screenshotdroid/INFO)
+  - [SystemUI.apk](/home/duda/screenshotdroid/SystemUI.apk)
+  - [framework.jar](/home/duda/screenshotdroid/framework.jar)
+  - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c)
+  - [services.jar](/home/duda/screenshotdroid/services.jar)
 - Re-read the current project docs and rooted-hook implementation notes before touching the Android build/deploy flow.
 - Investigated a new repeated-shot rendering bug reported on-device:
   - screenshot 1 preview looked correct

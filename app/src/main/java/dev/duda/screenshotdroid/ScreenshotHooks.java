@@ -11,6 +11,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
@@ -38,6 +39,7 @@ final class ScreenshotHooks {
     private static final String STACK_CARD_TAG_PREFIX = "ScreenshotDroidStackCard";
     private static final int IOS_FRAME_COLOR = Color.parseColor("#FFFFFF");
     private static final int IOS_FRAME_STROKE_COLOR = Color.parseColor("#D6D9DE");
+    private static final int IOS_CARD_BACKGROUND_COLOR = Color.BLACK;
     private static final float STACK_CARD_X_OFFSET_DP = 2.0f;
     private static final float STACK_CARD_Y_OFFSET_DP = 1.0f;
     private static final float CARD_MAX_WIDTH_DP = 88.0f;
@@ -306,7 +308,7 @@ final class ScreenshotHooks {
                 border.setBackground(null);
             }
         }
-        log("screenshot chrome styled with rounded #f0f0f0 frame");
+        log("screenshot chrome styled with white frame and black card fill");
     }
 
     private static void hideShelfChrome(View shelfView) {
@@ -523,13 +525,25 @@ final class ScreenshotHooks {
         overlayStackCards.clear();
     }
 
-    private static GradientDrawable createCardFrameDrawable(View view) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setShape(GradientDrawable.RECTANGLE);
-        drawable.setColor(IOS_FRAME_COLOR);
-        drawable.setCornerRadius(dp(view, 2f));
-        drawable.setStroke(1, IOS_FRAME_STROKE_COLOR);
-        return drawable;
+    private static Drawable createCardFrameDrawable(View view) {
+        int inset = dp(view, CARD_FRAME_INSET_DP);
+        float outerRadius = dp(view, 2.0f);
+        float innerRadius = Math.max(0.0f, outerRadius - inset);
+
+        GradientDrawable outer = new GradientDrawable();
+        outer.setShape(GradientDrawable.RECTANGLE);
+        outer.setColor(IOS_FRAME_COLOR);
+        outer.setCornerRadius(outerRadius);
+        outer.setStroke(1, IOS_FRAME_STROKE_COLOR);
+
+        GradientDrawable inner = new GradientDrawable();
+        inner.setShape(GradientDrawable.RECTANGLE);
+        inner.setColor(IOS_CARD_BACKGROUND_COLOR);
+        inner.setCornerRadius(innerRadius);
+
+        LayerDrawable layers = new LayerDrawable(new Drawable[]{outer, inner});
+        layers.setLayerInset(1, inset, inset, inset, inset);
+        return layers;
     }
 
     private static void syncPreviewLayout(ImageView preview, ImageView target) {
@@ -629,7 +643,7 @@ final class ScreenshotHooks {
         int inset = dp(preview, insetDp);
         Bitmap card = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(card);
-        GradientDrawable frame = createCardFrameDrawable(preview);
+        Drawable frame = createCardFrameDrawable(preview);
         frame.setBounds(0, 0, width, height);
         frame.draw(canvas);
         Rect dst = new Rect(inset, inset, width - inset, height - inset);
