@@ -48,6 +48,21 @@ final class ScreenshotHooks {
                 tintPreviewBorder(shelfView);
             }
         });
+        XposedBridge.hookAllMethods(proxyClass, "reset", new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                View shelfView = HookState.getScreenshotShelfView();
+                if (shelfView == null || !shelfView.isAttachedToWindow()) {
+                    HookState.clearSuppressNextShelfReset();
+                    return;
+                }
+                if (!HookState.consumeSuppressNextShelfReset()) {
+                    return;
+                }
+                log("Suppressing ScreenshotShelfViewProxy.reset() during screenshot reentry");
+                param.setResult(null);
+            }
+        });
     }
 
     private static void hookScreenshotController(ClassLoader classLoader) {
@@ -67,6 +82,23 @@ final class ScreenshotHooks {
                 } else {
                     log("ScreenshotController constructed but window field was null");
                 }
+            }
+        });
+        XposedBridge.hookAllMethods(controllerClass, "handleScreenshot", new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                View shelfView = HookState.getScreenshotShelfView();
+                if (shelfView != null && shelfView.isAttachedToWindow()) {
+                    HookState.armSuppressNextShelfReset();
+                    log("Armed reset suppression for screenshot reentry");
+                } else {
+                    HookState.clearSuppressNextShelfReset();
+                }
+            }
+
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                HookState.clearSuppressNextShelfReset();
             }
         });
     }

@@ -6,6 +6,7 @@ import java.lang.ref.WeakReference;
 final class HookState {
     private static volatile WeakReference<Object> screenshotWindowRef = new WeakReference<>(null);
     private static volatile WeakReference<View> screenshotShelfViewRef = new WeakReference<>(null);
+    private static volatile boolean suppressNextShelfReset;
 
     private HookState() {
     }
@@ -31,5 +32,21 @@ final class HookState {
 
     static View getScreenshotShelfView() {
         return screenshotShelfViewRef.get();
+    }
+
+    static void armSuppressNextShelfReset() {
+        suppressNextShelfReset = true;
+    }
+
+    static boolean consumeSuppressNextShelfReset() {
+        if (!suppressNextShelfReset) {
+            return false;
+        }
+        suppressNextShelfReset = false;
+        return true;
+    }
+
+    static void clearSuppressNextShelfReset() {
+        suppressNextShelfReset = false;
     }
 }

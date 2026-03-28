@@ -130,4 +130,7 @@ hook(ImageCaptureImpl.captureDisplay) {
   - screenshot N cannot exclude its own freshly-created shelf because that shelf is not attached yet
   - screenshot N+1 can exclude screenshot N's already-attached `ScreenshotUI` surface
 - Repeated-shot saved files from the device were byte-identical while the second shot used `setExcludeLayers(...)`, which strongly indicates the visible prior shelf was excluded successfully.
+- Reentry UX mitigation is now implemented:
+  - if screenshot N's shelf is still attached when `handleScreenshot(...)` begins for screenshot N+1, the next `ScreenshotShelfViewProxy.reset()` is suppressed once
+  - this is intended to keep screenshot N visible until screenshot N+1 is ready instead of clearing the shelf immediately
 - The remaining unverified piece is purely UX-level: confirm on the physical display that the shelf never visually blinks during screenshot N+1.

@@ -84,3 +84,18 @@
   - files were byte-identical (`sha256` and `cmp` matched)
   - the second shot was taken during `captureDisplay intercepted with excluded screenshot surface`
 - Strong inference: on this ROM, excluding the prior `ScreenshotUI` surface from `captureDisplay(...)` successfully removes the visible previous screenshot shelf from the next saved screenshot.
+- New UX issue reported by the user: during screenshot N+1, the previous screenshot shelf was vanishing from the display instead of staying visible until replaced.
+- Investigated `ScreenshotController.handleScreenshot(...)` and confirmed it calls `ScreenshotShelfViewProxy.reset()` before setting the new screenshot, which likely explains the visible vanish.
+- Added a targeted reentry hook:
+  - arm a one-shot reset suppression when `handleScreenshot(...)` starts and the old shelf is still attached
+  - suppress the next `ScreenshotShelfViewProxy.reset()` only for that reentry path
+- Re-enabled the LSPosed module after the user had disabled it.
+- Verified on-device on a true rapid two-shot sequence:
+  - screenshot N+1 still used excluded-layer capture for the prior `ScreenshotUI` surface
+  - `Armed reset suppression for screenshot reentry` fired
+  - `Suppressing ScreenshotShelfViewProxy.reset() during screenshot reentry` fired
+  - `ScreenshotWindow.removeWindow()` happened later on the normal shelf timeout, not immediately during reentry
+- Pulled the resulting screenshot pair:
+  - `Screenshot_20260328-031644_System-UI.png`
+  - `Screenshot_20260328-031644_System-UI (1).png`
+  - files were byte-identical (`sha256` and `cmp` matched), so exclusion still worked after the UX change

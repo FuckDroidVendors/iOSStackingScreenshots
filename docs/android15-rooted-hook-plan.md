@@ -136,6 +136,10 @@
 - Step 8 is partially validated:
   - repeated screenshot capture used the attached previous `ScreenshotUI` surface
   - the saved screenshot pair from that test was byte-identical
+- A first UX-focused reentry fix is now in place:
+  - `ScreenshotController.handleScreenshot(...)` reentry arms a one-shot suppression of `ScreenshotShelfViewProxy.reset()`
+  - on rapid screenshot N+1, that suppression fires while excluded-layer capture still works
+  - immediate teardown was not observed in logs; `removeWindow()` happened later on normal timeout
 - Remaining validation:
   - visually confirm there is no blink on the physical display during screenshot N+1
   - check whether excluding the whole `ScreenshotUI` window removes any stock controls that should remain

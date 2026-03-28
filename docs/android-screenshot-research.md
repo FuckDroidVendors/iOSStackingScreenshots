@@ -46,6 +46,8 @@
   - on the first screenshot, the screenshot shelf is not yet attached when capture runs
   - on a rapid follow-up screenshot while the previous shelf is still visible, `PhoneWindow.getRootSurfaceControl()` returns a live attached root and the hook can call `setExcludeLayers(...)`
   - two saved screenshots from that repeated-shot test were byte-identical, which strongly indicates the previous visible screenshot shelf was excluded from the second saved image
+  - the visible shelf-clearing problem comes from `ScreenshotController.handleScreenshot(...)` calling `ScreenshotShelfViewProxy.reset()` before the new screenshot is fully ready
+  - a targeted one-shot suppression of that reset during screenshot reentry is now implemented in the LSPosed module
 
 ## Existing Reference
 - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c) shows the X11/compositor-style solution already used elsewhere.
