@@ -1,35 +1,29 @@
 # TODO
 
-- Verify with a real prototype whether a secure overlay produces black/empty pixels or preserved underlying content in screenshots and `MediaProjection`.
-- Build a minimal Android spike using `MediaProjection` plus `TYPE_APPLICATION_OVERLAY` to measure practical limitations.
-- Investigate a rooted implementation that drives screenshot capture through privileged/system APIs instead of public `MediaProjection`.
-- Evaluate LSPosed hooks into SystemUI / framework screenshot flow to inject an excluded preview layer or temporarily redirect capture args.
-- Evaluate a Shizuku-backed service for calling privileged screenshot or window-management APIs from the app process.
-- Map the actual screenshot classes on crDroid 11.9 / Android 15 by inspecting `SystemUI.apk` and framework jars from the device.
-- Prototype an LSPosed hook on the screenshot capture path first, before building a standalone app UI.
-- Prototype a visible "hook active" cue by recoloring the screenshot preview border to red inside SystemUI's screenshot shelf.
-- Inspect `framework.jar` / `services.jar` from the device to find the cleanest exclusion path for the screenshot window type used by SystemUI.
-- Determine whether excluding the whole `ScreenshotUI` window is sufficient, or whether a child surface from the screenshot shelf must be excluded instead.
-- Resolve how to obtain the live `SurfaceControl` for the attached `ScreenshotWindow` decor view from the SystemUI screenshot process.
-- Prototype replacing `ImageCaptureImpl.captureDisplay(...)` with a call that adds `setExcludeLayers(...)` for the screenshot UI surface.
-- Validate whether excluding only the screenshot window surface removes the floating preview while preserving underlying app pixels.
-- Convert [docs/lsposed-hook-blueprint.md](/home/duda/screenshotdroid/docs/lsposed-hook-blueprint.md) into a minimal LSPosed module skeleton.
-- Trim diagnostic logging down to the minimum needed once the prototype behavior is stable.
-- Verify visually on-device that the previous screenshot shelf remains continuously visible during screenshot N+1, not only that it is absent from the saved file.
-- Verify whether the continuity overlay fully eliminates the visible blink for both hardware-key and three-finger screenshot entry paths.
-- If any blink remains, move the continuity snapshot earlier or seed it from a cached previous shelf snapshot instead of waiting for reentry-time `PixelCopy`.
-- Verify on-device that the stacked shelf renders correctly for 2-shot and 3-shot bursts, including the count badge and rear-card offsets.
-- Decide the first batch interaction model for the stacked shelf:
-  - tap/edit/share latest screenshot only
-  - or add explicit batch-aware affordances
-- Determine whether excluding the whole `ScreenshotUI` window removes any stock controls that should remain in the final UX.
-- Convert the current proof-of-concept module into a cleaner LSPosed package structure with configuration and safer runtime guards.
-- Decide whether to delete the remaining `reset()` diagnostic hook now that continuity overlay and stacked-shelf rendering are the primary UX path.
-- Investigate whether Android 14+ app-window sharing is useful for a scoped variant that captures only the selected app window.
-- Inspect AOSP/SystemUI screenshot flow in more detail and identify the smallest privileged patch that excludes the thumbnail overlay layer.
-- Decide target product model:
-  - stock unprivileged app with compromises
-  - rooted app using Shizuku / LSPosed / hidden APIs
-  - privileged app on rooted/device-owner builds
-  - AOSP/SystemUI modification
-- If Android implementation starts, add a concrete architecture doc and test matrix.
+- [ ] Verify with a real prototype whether a secure overlay produces black/empty pixels or preserved underlying content in screenshots and `MediaProjection`.
+- [ ] Build a minimal Android spike using `MediaProjection` plus `TYPE_APPLICATION_OVERLAY` to measure practical limitations.
+- [x] Investigate a rooted implementation that drives screenshot capture through privileged/system APIs instead of public `MediaProjection`.
+- [x] Evaluate LSPosed hooks into SystemUI/framework screenshot flow to inject an excluded preview layer or temporarily redirect capture args.
+- [ ] Evaluate a Shizuku-backed service for calling privileged screenshot or window-management APIs from the app process.
+- [x] Map the actual screenshot classes on crDroid 11.9 / Android 15 by inspecting `SystemUI.apk` and framework jars from the device.
+- [x] Prototype an LSPosed hook on the screenshot capture path first, before building a standalone app UI.
+- [x] Prototype a visible "hook active" cue by recoloring the screenshot preview border to red inside SystemUI's screenshot shelf.
+- [x] Inspect `framework.jar` / `services.jar` from the device to find the cleanest exclusion path for the screenshot window type used by SystemUI.
+- [x] Determine whether excluding the whole `ScreenshotUI` window is sufficient, or whether a child surface from the screenshot shelf must be excluded instead.
+- [x] Resolve how to obtain the live `SurfaceControl` for the attached `ScreenshotWindow` decor view from the SystemUI screenshot process.
+- [x] Prototype replacing `ImageCaptureImpl.captureDisplay(...)` with a call that adds `setExcludeLayers(...)` for the screenshot UI surface.
+- [x] Validate whether excluding only the screenshot window surface removes the floating preview while preserving underlying app pixels.
+- [x] Convert [docs/lsposed-hook-blueprint.md](/home/duda/screenshotdroid/docs/lsposed-hook-blueprint.md) into a minimal LSPosed module skeleton.
+- [ ] Trim diagnostic logging down to the minimum needed once the prototype behavior is stable.
+- [ ] Verify visually on-device that the previous screenshot shelf remains continuously visible during screenshot N+1, not only that it is absent from the saved file.
+- [ ] Verify whether the continuity overlay fully eliminates the visible blink for both hardware-key and three-finger screenshot entry paths.
+- [ ] If any blink remains, move the continuity snapshot earlier or seed it from a cached previous shelf snapshot instead of waiting for reentry-time `PixelCopy`.
+- [ ] Verify on-device that the stacked shelf renders correctly for 2-shot and 3-shot bursts, including the count badge and rear-card offsets.
+- [ ] Decide the first batch interaction model for the stacked shelf (tap/edit/share latest screenshot only vs explicit batch-aware affordances).
+- [ ] Determine whether excluding the whole `ScreenshotUI` window removes any stock controls that should remain in the final UX.
+- [ ] Convert the current proof-of-concept module into a cleaner LSPosed package structure with configuration and safer runtime guards.
+- [ ] Decide whether to delete the remaining `reset()` diagnostic hook now that continuity overlay and stacked-shelf rendering are the primary UX path.
+- [ ] Investigate whether Android 14+ app-window sharing is useful for a scoped variant that captures only the selected app window.
+- [ ] Inspect AOSP/SystemUI screenshot flow in more detail and identify the smallest privileged patch that excludes the thumbnail overlay layer.
+- [ ] Decide target product model: stock unprivileged app with compromises; rooted app using Shizuku / LSPosed / hidden APIs; privileged app on rooted/device-owner builds; or AOSP/SystemUI modification.
+- [ ] If Android implementation starts, add a concrete architecture doc and test matrix.
