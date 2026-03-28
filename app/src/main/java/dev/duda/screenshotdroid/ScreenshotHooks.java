@@ -16,6 +16,7 @@ import android.os.Looper;
 import android.view.Gravity;
 import android.view.PixelCopy;
 import android.view.View;
+import android.view.View.MeasureSpec;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.ImageView;
@@ -35,7 +36,8 @@ final class ScreenshotHooks {
     private static final Paint CARD_BITMAP_PAINT =
             new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private static final String STACK_CARD_TAG_PREFIX = "ScreenshotDroidStackCard";
-    private static final int IOS_FRAME_COLOR = Color.parseColor("#F0F0F0");
+    private static final int IOS_FRAME_COLOR = Color.parseColor("#FFFFFF");
+    private static final int IOS_FRAME_STROKE_COLOR = Color.parseColor("#D6D9DE");
     private static final float STACK_CARD_X_OFFSET_DP = 2.0f;
     private static final float STACK_CARD_Y_OFFSET_DP = 1.0f;
     private static final float CARD_MAX_WIDTH_DP = 88.0f;
@@ -114,15 +116,18 @@ final class ScreenshotHooks {
 
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
+                Object screenshotData = param.args[0];
+                Object bitmap = ReflectionHelpers.getObjectFieldIfExists(screenshotData, "bitmap");
                 HookState.markReentryPreviewBound();
                 View shelfView = HookState.getScreenshotShelfView();
                 if (shelfView != null) {
+                    if (bitmap instanceof Bitmap) {
+                        forceCurrentPreviewBitmap(shelfView, (Bitmap) bitmap);
+                    }
                     hideShelfChrome(shelfView);
                     scheduleStackUiUpdate(shelfView);
                 }
-                if (HookState.getContinuityOverlayView() != null) {
-                    scheduleContinuityOverlayRemoval(CONTINUITY_HANDOFF_MS, false);
-                }
+                removeContinuityOverlay(false);
             }
         });
         XposedBridge.hookAllMethods(proxyClass, "requestDismissal", new XC_MethodHook() {
@@ -170,9 +175,9 @@ final class ScreenshotHooks {
             protected void beforeHookedMethod(MethodHookParam param) {
                 View shelfView = HookState.getScreenshotShelfView();
                 if (shelfView != null && shelfView.isAttachedToWindow()) {
-                    createContinuityOverlayFromShelf(shelfView);
+                    removeContinuityOverlay(false);
                     HookState.armReentryGrace();
-                    log("Prepared continuity overlay for screenshot reentry");
+                    log("Armed screenshot reentry without continuity overlay");
                 } else {
                     HookState.clearReentryGrace();
                     HookState.clearPreviewStack();
@@ -285,10 +290,11 @@ final class ScreenshotHooks {
     private static void tintPreviewBorder(View shelfView) {
         ImageView preview = findImageView(shelfView, "screenshot_preview");
         if (preview != null) {
-            Bitmap latest = HookState.getLastPreviewBitmap();
-            if (latest != null) {
-                applyFramedPreview(preview, latest);
-            }
+            int inset = dp(preview, CARD_FRAME_INSET_DP);
+            preview.setBackground(createCardFrameDrawable(preview));
+            preview.setPadding(inset, inset, inset, inset);
+            preview.setClipToOutline(false);
+            preview.setScaleType(ImageView.ScaleType.FIT_XY);
         }
         int borderId = shelfView.getResources()
                 .getIdentifier("screenshot_preview_border", "id", "com.android.systemui");
@@ -297,6 +303,7 @@ final class ScreenshotHooks {
             if (border != null) {
                 border.setVisibility(View.GONE);
                 border.setAlpha(0.0f);
+                border.setBackground(null);
             }
         }
         log("screenshot chrome styled with rounded #f0f0f0 frame");
@@ -350,6 +357,8 @@ final class ScreenshotHooks {
             return;
         }
 
+        logViewGeometry("preview before update", preview);
+        logViewGeometry("previewBlur before update", previewBlur);
         tintPreviewBorder(shelfView);
         clearSyntheticStackUi(shelfStatic);
         List<Bitmap> stackBitmaps = HookState.getStackBitmaps();
@@ -360,10 +369,14 @@ final class ScreenshotHooks {
         }
 
         previewBlur.setVisibility(View.INVISIBLE);
-        int visibleCards = Math.min(2, stackBitmaps.size());
-        // ViewGroupOverlay draws in insertion order, so add the oldest/deepest card first.
-        for (int depth = visibleCards - 1; depth >= 0; depth--) {
-            addOverlayStackCard(shelfStatic, preview, stackBitmaps.get(depth), depth);
+        preview.setAlpha(0.0f);
+        int visibleRearCards = Math.min(2, stackBitmaps.size());
+        for (int depth = visibleRearCards - 1; depth >= 0; depth--) {
+            addOverlayStackCard(shelfStatic, preview, stackBitmaps.get(depth), depth + 1);
+        }
+        Bitmap currentBitmap = HookState.getLastPreviewBitmap();
+        if (currentBitmap != null) {
+            addOverlayStackCard(shelfStatic, preview, currentBitmap, 0);
         }
 
         int totalCount = stackBitmaps.size() + (HookState.getLastPreviewBitmap() != null ? 1 : 0);
@@ -378,6 +391,7 @@ final class ScreenshotHooks {
             clearSyntheticStackUi(shelfStatic);
         }
         if (preview != null) {
+            preview.setAlpha(1.0f);
             preview.setTranslationX(0.0f);
             preview.setTranslationY(0.0f);
         }
@@ -397,17 +411,15 @@ final class ScreenshotHooks {
         }
     }
 
-    private static void addOverlayStackCard(ViewGroup shelfStatic, ImageView preview, Bitmap bitmap, int depth) {
+    private static void applyRearStackCard(ImageView stackCard, ImageView preview, Bitmap bitmap, int depth) {
         Bitmap cardBitmap = createCardBitmap(preview, bitmap, CARD_FRAME_INSET_DP);
         if (cardBitmap == null) {
             return;
         }
-        BitmapDrawable drawable = new BitmapDrawable(shelfStatic.getResources(), cardBitmap);
-        int left = Math.round(preview.getX()) + dp(preview, STACK_CARD_X_OFFSET_DP) * (depth + 1);
-        int top = Math.round(preview.getY()) - dp(preview, STACK_CARD_Y_OFFSET_DP) * (depth + 1);
-        drawable.setBounds(left, top, left + cardBitmap.getWidth(), top + cardBitmap.getHeight());
-        shelfStatic.getOverlay().add(drawable);
-        overlayStackCards.add(drawable);
+        applyScreenshotBitmap(stackCard, cardBitmap);
+        syncPreviewLayout(preview, stackCard);
+        layoutStackCardToPreviewBounds(preview, stackCard);
+        applyStackCard(stackCard, preview, depth);
     }
 
     private static void applyStackCard(ImageView stackCard, ImageView preview, int depth) {
@@ -417,9 +429,47 @@ final class ScreenshotHooks {
         stackCard.setAlpha(1.0f);
         stackCard.setScaleX(1.0f);
         stackCard.setScaleY(1.0f);
-        stackCard.setTranslationX(dp(stackCard, STACK_CARD_X_OFFSET_DP) * (depth + 1));
-        stackCard.setTranslationY(-dp(stackCard, STACK_CARD_Y_OFFSET_DP) * (depth + 1));
+        float offsetX = dp(stackCard, STACK_CARD_X_OFFSET_DP) * (depth + 1);
+        float offsetY = dp(stackCard, STACK_CARD_Y_OFFSET_DP) * (depth + 1);
+        stackCard.setTranslationX(preview.getTranslationX() - offsetX);
+        stackCard.setTranslationY(preview.getTranslationY() + offsetY);
         stackCard.setElevation(Math.max(0.0f, preview.getElevation() - (depth + 1)));
+    }
+
+    private static void addOverlayStackCard(ViewGroup shelfStatic, ImageView preview, Bitmap bitmap, int depth) {
+        Bitmap cardBitmap = createCardBitmap(preview, bitmap, CARD_FRAME_INSET_DP);
+        if (cardBitmap == null) {
+            return;
+        }
+        BitmapDrawable drawable = new BitmapDrawable(shelfStatic.getResources(), cardBitmap);
+        int offsetX = dp(preview, STACK_CARD_X_OFFSET_DP) * depth;
+        int offsetY = dp(preview, STACK_CARD_Y_OFFSET_DP) * depth;
+        int left = Math.round(preview.getX()) + offsetX;
+        int top = Math.round(preview.getY()) - offsetY;
+        drawable.setBounds(left, top, left + cardBitmap.getWidth(), top + cardBitmap.getHeight());
+        shelfStatic.getOverlay().add(drawable);
+        overlayStackCards.add(drawable);
+    }
+
+    private static ImageView ensureSyntheticStackCard(ViewGroup shelfStatic, ImageView preview, int depth) {
+        String tag = STACK_CARD_TAG_PREFIX + depth;
+        for (int i = 0; i < shelfStatic.getChildCount(); i++) {
+            View child = shelfStatic.getChildAt(i);
+            if (tag.equals(child.getTag()) && child instanceof ImageView) {
+                return (ImageView) child;
+            }
+        }
+
+        ImageView stackCard = new ImageView(shelfStatic.getContext());
+        stackCard.setTag(tag);
+        ViewGroup.LayoutParams layoutParams = cloneLayoutParams(preview.getLayoutParams());
+        if (layoutParams != null) {
+            stackCard.setLayoutParams(layoutParams);
+        }
+        int previewIndex = shelfStatic.indexOfChild(preview);
+        int insertIndex = previewIndex >= 0 ? previewIndex : shelfStatic.getChildCount();
+        shelfStatic.addView(stackCard, insertIndex);
+        return stackCard;
     }
 
     private static void resetRearPreview(ImageView previewBlur) {
@@ -432,6 +482,23 @@ final class ScreenshotHooks {
         previewBlur.setScaleY(1.0f);
         previewBlur.setAlpha(1.0f);
         previewBlur.setVisibility(View.INVISIBLE);
+    }
+
+    private static void logViewGeometry(String label, View view) {
+        if (view == null) {
+            log(label + ": null");
+            return;
+        }
+        log(label
+                + " left=" + view.getLeft()
+                + " top=" + view.getTop()
+                + " x=" + view.getX()
+                + " y=" + view.getY()
+                + " tx=" + view.getTranslationX()
+                + " ty=" + view.getTranslationY()
+                + " w=" + view.getWidth()
+                + " h=" + view.getHeight()
+                + " vis=" + view.getVisibility());
     }
 
     private static void scheduleStackUiUpdate(final View shelfView) {
@@ -461,7 +528,7 @@ final class ScreenshotHooks {
         drawable.setShape(GradientDrawable.RECTANGLE);
         drawable.setColor(IOS_FRAME_COLOR);
         drawable.setCornerRadius(dp(view, 2f));
-        drawable.setStroke(dp(view, 2f), IOS_FRAME_COLOR);
+        drawable.setStroke(1, IOS_FRAME_STROKE_COLOR);
         return drawable;
     }
 
@@ -488,6 +555,18 @@ final class ScreenshotHooks {
         target.setLayoutParams(targetParams);
     }
 
+    private static void layoutStackCardToPreviewBounds(ImageView preview, ImageView target) {
+        int width = preview.getWidth();
+        int height = preview.getHeight();
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        int widthSpec = MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY);
+        int heightSpec = MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY);
+        target.measure(widthSpec, heightSpec);
+        target.layout(preview.getLeft(), preview.getTop(), preview.getLeft() + width, preview.getTop() + height);
+    }
+
     private static View findViewById(View root, String idName) {
         int id = root.getResources().getIdentifier(idName, "id", "com.android.systemui");
         return id == 0 ? null : root.findViewById(id);
@@ -497,6 +576,15 @@ final class ScreenshotHooks {
         imageView.setImageBitmap(bitmap);
         imageView.setScaleType(ImageView.ScaleType.FIT_XY);
         imageView.requestLayout();
+    }
+
+    private static void forceCurrentPreviewBitmap(View shelfView, Bitmap bitmap) {
+        ImageView preview = findImageView(shelfView, "screenshot_preview");
+        if (preview == null || bitmap == null) {
+            return;
+        }
+        preview.setImageBitmap(bitmap);
+        preview.invalidate();
     }
 
     private static void applyCardLayout(ImageView imageView, Bitmap bitmap) {

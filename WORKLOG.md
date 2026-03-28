@@ -8,6 +8,31 @@
   - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c)
   - [services.jar](/home/duda/screenshotdroid/services.jar)
 - Re-read the current project docs and rooted-hook implementation notes before touching the Android build/deploy flow.
+- Investigated a new repeated-shot rendering bug reported on-device:
+  - screenshot 1 preview looked correct
+  - screenshot 2 preview looked like screenshot 1 with partial white background
+  - screenshot 3 preview looked like screenshot 2 with partial white background
+- Reproduced the issue on-device with ADB-assisted `screencap` dumps and LSPosed hook logs after each screenshot state.
+- Narrowed the failure to the custom front-preview composition path in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/dev/duda/screenshotdroid/ScreenshotHooks.java): the hook was replacing the stock `screenshot_preview` image with a newly composed framed bitmap on each update.
+- Fixed the front-preview path by stopping that custom bitmap rewrite:
+  - leave `screenshot_preview` bound to the stock/current screenshot bitmap
+  - restore and style the stock `screenshot_preview_border` view instead of hiding it
+- Rebuilt the LSPosed module with `./gradlew assembleDebug`, installed the updated APK, restarted `SystemUI`, and cleared logs.
+- Re-ran a fresh 3-shot sequence on-device after the patch.
+- Verified from screen dumps and hook logs that:
+  - screenshot 2 now shows the current second screenshot in the lower-left preview instead of a stale screenshot 1 front card
+  - screenshot 3 now shows the current third screenshot in the lower-left preview instead of a stale screenshot 2 front card
+  - the rear stack still advances as expected (`updateStackUi: stack=1 total=2`, then `stack=2 total=3`)
+- Also extended the device screen timeout over ADB during testing to keep the display awake across repeated manual captures.
+
+## 2026-03-28
+- Re-checked repository state before work. Untracked device artifacts remain:
+  - [INFO](/home/duda/screenshotdroid/INFO)
+  - [SystemUI.apk](/home/duda/screenshotdroid/SystemUI.apk)
+  - [framework.jar](/home/duda/screenshotdroid/framework.jar)
+  - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c)
+  - [services.jar](/home/duda/screenshotdroid/services.jar)
+- Re-read the current project docs and rooted-hook implementation notes before touching the Android build/deploy flow.
 - Verified the current tree already builds successfully with `./gradlew assembleDebug`.
 - Confirmed the connected target device is still the rooted POCO F1 at `192.168.2.56:5555`.
 - Installed the current debug APK to the device with `adb -s 192.168.2.56:5555 install -r app/build/outputs/apk/debug/app-debug.apk`.
