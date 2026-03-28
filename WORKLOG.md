@@ -16,6 +16,7 @@
 - Rebuilt the LSPosed module with `./gradlew assembleDebug`, installed the updated APK to `192.168.2.56:5555`, and restarted `SystemUI`.
 - Followed up on residual alpha bleed between stacked cards by making the card frame drawable fully opaque:
   - added a black base layer under the white frame so rounded corners no longer remain transparent
+- Forced the composed card bitmap content area to be opaque by pre-filling the screenshot draw rect with black before drawing the bitmap.
 
 ## 2026-03-28
 - Re-checked repository state before work. Untracked device artifacts remain:

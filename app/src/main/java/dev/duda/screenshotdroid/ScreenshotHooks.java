@@ -36,6 +36,7 @@ final class ScreenshotHooks {
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final Paint CARD_BITMAP_PAINT =
             new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private static final Paint CARD_CONTENT_BACKGROUND_PAINT = new Paint(Paint.ANTI_ALIAS_FLAG);
     private static final String STACK_CARD_TAG_PREFIX = "ScreenshotDroidStackCard";
     private static final int IOS_FRAME_COLOR = Color.parseColor("#FFFFFF");
     private static final int IOS_FRAME_STROKE_COLOR = Color.parseColor("#D6D9DE");
@@ -49,6 +50,10 @@ final class ScreenshotHooks {
     private static final ArrayList<Drawable> overlayStackCards = new ArrayList<>();
     private static volatile boolean installed;
     private static Runnable continuityOverlayRemoval;
+
+    static {
+        CARD_CONTENT_BACKGROUND_PAINT.setColor(IOS_CARD_BACKGROUND_COLOR);
+    }
 
     private ScreenshotHooks() {
     }
@@ -659,6 +664,7 @@ final class ScreenshotHooks {
                 return null;
             }
         }
+        canvas.drawRect(dst, CARD_CONTENT_BACKGROUND_PAINT);
         canvas.drawBitmap(safeBitmap, null, dst, CARD_BITMAP_PAINT);
         return card;
     }
