@@ -19,6 +19,10 @@
 - Root cause: the continuity overlay was still showing a snapshot of the previous shelf for `1200 ms`, so it visually covered the freshly updated shelf even after the new screenshot had already been bound underneath.
 - Fixed the continuity-overlay handoff in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/dev/duda/screenshotdroid/ScreenshotHooks.java) so the old overlay is removed shortly after `setScreenshot(...)` updates the new preview, while keeping the longer timeout as a fallback safety path.
 - Rebuilt, reinstalled, and restarted `SystemUI` again so the new handoff behavior is live on-device.
+- Investigated a final report that the previous screenshot could still appear on top even after the shorter handoff delay.
+- Root cause: `PixelCopy` is asynchronous, so the old-shelf continuity overlay could still be added after `setScreenshot(...)` had already bound the new preview. In that order, the previous screenshot would be reintroduced above the newest one and only disappear later.
+- Fixed the race by tracking whether the new preview has already bound during the active reentry window and refusing to add a stale continuity overlay after that point.
+- Rebuilt, reinstalled, and restarted `SystemUI` again so the stale-overlay race fix is now live on-device.
 
 ## 2026-03-27
 - Inspected repository state. Found only one untracked file: [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c).

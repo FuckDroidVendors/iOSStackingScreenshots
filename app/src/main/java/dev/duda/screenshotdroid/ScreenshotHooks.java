@@ -114,6 +114,7 @@ final class ScreenshotHooks {
 
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
+                HookState.markReentryPreviewBound();
                 View shelfView = HookState.getScreenshotShelfView();
                 if (shelfView != null) {
                     hideShelfChrome(shelfView);
@@ -683,6 +684,10 @@ final class ScreenshotHooks {
 
     private static void addContinuityOverlay(WindowManager windowManager, android.content.Context context,
             Bitmap snapshot, Rect sourceRect) {
+        if (HookState.hasReentryPreviewBound()) {
+            log("Skipping stale continuity overlay because new preview is already bound");
+            return;
+        }
         ImageView overlay = new ImageView((android.content.Context) context);
         overlay.setImageBitmap(snapshot);
         overlay.setScaleType(ImageView.ScaleType.FIT_XY);

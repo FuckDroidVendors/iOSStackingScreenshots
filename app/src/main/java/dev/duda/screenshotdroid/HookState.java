@@ -26,6 +26,7 @@ final class HookState {
     private static volatile Bitmap lastPreviewBitmap;
     private static final ArrayList<Bitmap> previewStack = new ArrayList<>();
     private static volatile long reentryArmedAtMs;
+    private static volatile boolean reentryPreviewBound;
 
     private HookState() {
     }
@@ -111,10 +112,22 @@ final class HookState {
 
     static void armReentryGrace() {
         reentryArmedAtMs = android.os.SystemClock.uptimeMillis();
+        reentryPreviewBound = false;
     }
 
     static void clearReentryGrace() {
         reentryArmedAtMs = 0L;
+        reentryPreviewBound = false;
+    }
+
+    static void markReentryPreviewBound() {
+        if (isReentryActive()) {
+            reentryPreviewBound = true;
+        }
+    }
+
+    static boolean hasReentryPreviewBound() {
+        return reentryPreviewBound;
     }
 
     static Object getContinuityOverlaySurface() {
