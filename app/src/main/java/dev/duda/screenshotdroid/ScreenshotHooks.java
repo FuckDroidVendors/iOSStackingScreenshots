@@ -33,6 +33,7 @@ final class ScreenshotHooks {
     private static final String TAG = "ScreenshotDroid";
     private static final long CONTINUITY_OVERLAY_MS = 1200L;
     private static final long CONTINUITY_HANDOFF_MS = 96L;
+    private static final int SCREENSHOT_TIMEOUT_MS = 5000;
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final Paint CARD_BITMAP_PAINT =
             new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -141,8 +142,7 @@ final class ScreenshotHooks {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
                 String eventName = String.valueOf(param.args[0]);
-                if ("SCREENSHOT_INTERACTION_TIMEOUT".equals(eventName)
-                        || "SCREENSHOT_DISMISSED_OTHER".equals(eventName)) {
+                if ("SCREENSHOT_DISMISSED_OTHER".equals(eventName)) {
                     log("Ignoring stock dismissal event " + eventName);
                     param.setResult(null);
                 }
@@ -175,6 +175,11 @@ final class ScreenshotHooks {
                 } else {
                     log("ScreenshotController constructed but window field was null");
                 }
+                Object timeoutHandler = ReflectionHelpers.getObjectFieldIfExists(param.thisObject, "screenshotHandler");
+                if (timeoutHandler != null) {
+                    XposedHelpers.setIntField(timeoutHandler, "mDefaultTimeout", SCREENSHOT_TIMEOUT_MS);
+                    log("Set stock screenshot timeout to " + SCREENSHOT_TIMEOUT_MS + "ms");
+                }
             }
         });
         XposedBridge.hookAllMethods(controllerClass, "handleScreenshot", new XC_MethodHook() {
@@ -203,8 +208,6 @@ final class ScreenshotHooks {
         XposedBridge.hookAllMethods(callbackClass, "onTouchOutside", new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
-                log("Ignoring onTouchOutside dismissal");
-                param.setResult(null);
             }
         });
     }

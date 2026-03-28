@@ -7,6 +7,27 @@
   - [framework.jar](/home/duda/screenshotdroid/framework.jar)
   - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c)
   - [services.jar](/home/duda/screenshotdroid/services.jar)
+- Re-read the current project docs and inspected the LSPosed screenshot shelf hook before changing dismissal behavior.
+- Added a shelf inactivity timeout to [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/dev/duda/screenshotdroid/ScreenshotHooks.java):
+  - new screenshots now reset a 5-second auto-dismiss timer
+  - touches on the screenshot shelf also reset that timer
+  - when the timer expires, the hook clears the custom stacked state and calls `ScreenshotWindow.removeWindow()` so the shelf disappears using the existing teardown path
+- Followed up on a regression in second-shot interaction after the first timeout implementation:
+  - confirmed the screenshot hook lives in `com.android.systemui:screenshot`, not the main `com.android.systemui` process
+  - verified the timeout firing through LSPosed logs after restarting the correct screenshot process
+  - removed the extra shelf `dispatchTouchEvent` hook and stopped suppressing `onTouchOutside`, so touch handling returns to stock while keeping the delayed stock-timeout auto-dismiss path
+- Reworked the auto-dismiss implementation again after the delayed-dismiss approach still left a half-dismissed, input-blocking shelf window:
+  - decompiled the local `SystemUI.apk` with `jadx` and confirmed `ScreenshotController` sets `screenshotHandler.mDefaultTimeout = 3000`
+  - changed the LSPosed hook to override that stock timeout to `5000 ms` in `ScreenshotController` construction instead of intercepting `SCREENSHOT_INTERACTION_TIMEOUT`
+  - removed the custom delayed-dismiss helper so stock dismissal animation and input teardown run on the normal SystemUI path
+
+## 2026-03-28
+- Re-checked repository state before work. Untracked device artifacts remain:
+  - [INFO](/home/duda/screenshotdroid/INFO)
+  - [SystemUI.apk](/home/duda/screenshotdroid/SystemUI.apk)
+  - [framework.jar](/home/duda/screenshotdroid/framework.jar)
+  - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c)
+  - [services.jar](/home/duda/screenshotdroid/services.jar)
 - Re-read the current project docs and rooted-hook implementation notes before touching the screenshot shelf renderer.
 - Investigated a visual defect in the screenshot thumbnail where transparent pixels in the preview were revealing the white frame background, most visibly along the right edge.
 - Fixed [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/dev/duda/screenshotdroid/ScreenshotHooks.java) by changing the shared card background helper from a fully white fill to a two-layer card:
