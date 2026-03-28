@@ -11,6 +11,10 @@
 - Verified the current tree already builds successfully with `./gradlew assembleDebug`.
 - Confirmed the connected target device is still the rooted POCO F1 at `192.168.2.56:5555`.
 - Installed the current debug APK to the device with `adb -s 192.168.2.56:5555 install -r app/build/outputs/apk/debug/app-debug.apk`.
+- Investigated a reported stacked-shelf ordering bug where older screenshots were painting above newer rear cards.
+- Fixed the draw order in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/dev/duda/screenshotdroid/ScreenshotHooks.java) by inserting rear-card overlay drawables from deepest/oldest to newest so the newer card remains visually on top.
+- Rebuilt the LSPosed module with `./gradlew assembleDebug`.
+- Installed the updated debug APK to the device and restarted `SystemUI` so the `com.android.systemui:screenshot` process would reload the hook.
 
 ## 2026-03-27
 - Inspected repository state. Found only one untracked file: [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c).

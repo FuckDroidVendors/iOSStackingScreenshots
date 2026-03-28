@@ -355,11 +355,10 @@ final class ScreenshotHooks {
         }
 
         previewBlur.setVisibility(View.INVISIBLE);
-        if (stackBitmaps.size() > 0) {
-            addOverlayStackCard(shelfStatic, preview, stackBitmaps.get(0), 0);
-        }
-        if (stackBitmaps.size() > 1) {
-            addOverlayStackCard(shelfStatic, preview, stackBitmaps.get(1), 1);
+        int visibleCards = Math.min(2, stackBitmaps.size());
+        // ViewGroupOverlay draws in insertion order, so add the oldest/deepest card first.
+        for (int depth = visibleCards - 1; depth >= 0; depth--) {
+            addOverlayStackCard(shelfStatic, preview, stackBitmaps.get(depth), depth);
         }
 
         int totalCount = stackBitmaps.size() + (HookState.getLastPreviewBitmap() != null ? 1 : 0);
