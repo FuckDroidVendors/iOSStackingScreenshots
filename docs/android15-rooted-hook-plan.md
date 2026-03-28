@@ -140,6 +140,10 @@
   - `ScreenshotController.handleScreenshot(...)` reentry arms a one-shot suppression of `ScreenshotShelfViewProxy.reset()`
   - on rapid screenshot N+1, that suppression fires while excluded-layer capture still works
   - immediate teardown was not observed in logs; `removeWindow()` happened later on normal timeout
+- A second UX-focused reentry fix is now prototyped:
+  - on screenshot N+1, capture the visible screenshot shelf with `PixelCopy`
+  - place that snapshot into a short-lived continuity overlay window at the same bounds
+  - let stock SystemUI tear down and rebuild underneath while the user keeps seeing the old shelf snapshot
 - Remaining validation:
   - visually confirm there is no blink on the physical display during screenshot N+1
   - check whether excluding the whole `ScreenshotUI` window removes any stock controls that should remain

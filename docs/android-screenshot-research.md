@@ -48,6 +48,11 @@
   - two saved screenshots from that repeated-shot test were byte-identical, which strongly indicates the previous visible screenshot shelf was excluded from the second saved image
   - the visible shelf-clearing problem comes from `ScreenshotController.handleScreenshot(...)` calling `ScreenshotShelfViewProxy.reset()` before the new screenshot is fully ready
   - a targeted one-shot suppression of that reset during screenshot reentry is now implemented in the LSPosed module
+  - a newer continuity-overlay prototype is also implemented:
+    - on screenshot N+1, the module snapshots screenshot N's currently visible shelf with `PixelCopy`
+    - it displays that snapshot in a temporary transparent overlay positioned over the original shelf
+    - this is intended to cover the stock teardown/rebuild gap even if reset suppression alone is not visually sufficient
+  - LSPosed logs on-device confirm that the continuity overlay is added during screenshot N+1 on this ROM
 
 ## Existing Reference
 - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c) shows the X11/compositor-style solution already used elsewhere.

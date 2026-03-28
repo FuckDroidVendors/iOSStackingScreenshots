@@ -16,9 +16,11 @@
 - Convert [docs/lsposed-hook-blueprint.md](/home/duda/screenshotdroid/docs/lsposed-hook-blueprint.md) into a minimal LSPosed module skeleton.
 - Trim diagnostic logging down to the minimum needed once the prototype behavior is stable.
 - Verify visually on-device that the previous screenshot shelf remains continuously visible during screenshot N+1, not only that it is absent from the saved file.
+- Verify whether the continuity overlay fully eliminates the visible blink for both hardware-key and three-finger screenshot entry paths.
+- If any blink remains, move the continuity snapshot earlier or seed it from a cached previous shelf snapshot instead of waiting for reentry-time `PixelCopy`.
 - Determine whether excluding the whole `ScreenshotUI` window removes any stock controls that should remain in the final UX.
 - Convert the current proof-of-concept module into a cleaner LSPosed package structure with configuration and safer runtime guards.
-- Decide whether the current targeted `reset()` suppression is sufficient, or whether the final implementation should preserve more of the old shelf state explicitly during reentry.
+- Decide whether the continuity-overlay approach should replace the earlier targeted `reset()` suppression entirely.
 - Investigate whether Android 14+ app-window sharing is useful for a scoped variant that captures only the selected app window.
 - Inspect AOSP/SystemUI screenshot flow in more detail and identify the smallest privileged patch that excludes the thumbnail overlay layer.
 - Decide target product model:

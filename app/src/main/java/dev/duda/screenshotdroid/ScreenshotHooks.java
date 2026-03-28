@@ -1,17 +1,30 @@
 package dev.duda.screenshotdroid;
 
+import android.animation.AnimatorSet;
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
+import android.view.PixelCopy;
 import android.view.View;
+import android.view.WindowManager;
+import android.widget.ImageView;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 final class ScreenshotHooks {
     private static final String TAG = "ScreenshotDroid";
+    private static final long CONTINUITY_OVERLAY_MS = 1200L;
+    private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static volatile boolean installed;
+    private static Runnable continuityOverlayRemoval;
 
     private ScreenshotHooks() {
     }
@@ -48,19 +61,37 @@ final class ScreenshotHooks {
                 tintPreviewBorder(shelfView);
             }
         });
+        XposedHelpers.findAndHookMethod(proxyClass, "createScreenshotDropInAnimation", Rect.class, boolean.class,
+                new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        param.args[1] = Boolean.FALSE;
+                        if (!HookState.isReentryGraceActive()) {
+                            return;
+                        }
+                        forcePreviewVisible(param.thisObject);
+                        log("Skipping drop-in animation during screenshot reentry");
+                        param.setResult(new AnimatorSet());
+                    }
+                });
+        XposedBridge.hookAllMethods(proxyClass, "setScreenshot", new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                Object screenshotData = param.args[0];
+                HookState.setLastScreenshotData(screenshotData);
+                Object bitmap = ReflectionHelpers.getObjectFieldIfExists(screenshotData, "bitmap");
+                if (bitmap instanceof Bitmap) {
+                    HookState.setLastPreviewBitmap((Bitmap) bitmap);
+                    log("Cached screenshot preview bitmap");
+                }
+            }
+        });
         XposedBridge.hookAllMethods(proxyClass, "reset", new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
-                View shelfView = HookState.getScreenshotShelfView();
-                if (shelfView == null || !shelfView.isAttachedToWindow()) {
-                    HookState.clearSuppressNextShelfReset();
-                    return;
+                if (HookState.isReentryGraceActive()) {
+                    log("ScreenshotShelfViewProxy.reset() called during reentry grace");
                 }
-                if (!HookState.consumeSuppressNextShelfReset()) {
-                    return;
-                }
-                log("Suppressing ScreenshotShelfViewProxy.reset() during screenshot reentry");
-                param.setResult(null);
             }
         });
     }
@@ -89,16 +120,12 @@ final class ScreenshotHooks {
             protected void beforeHookedMethod(MethodHookParam param) {
                 View shelfView = HookState.getScreenshotShelfView();
                 if (shelfView != null && shelfView.isAttachedToWindow()) {
-                    HookState.armSuppressNextShelfReset();
-                    log("Armed reset suppression for screenshot reentry");
+                    createContinuityOverlayFromShelf(shelfView);
+                    HookState.armReentryGrace();
+                    log("Prepared continuity overlay for screenshot reentry");
                 } else {
                     HookState.clearSuppressNextShelfReset();
                 }
-            }
-
-            @Override
-            protected void afterHookedMethod(MethodHookParam param) {
-                HookState.clearSuppressNextShelfReset();
             }
         });
     }
@@ -111,6 +138,15 @@ final class ScreenshotHooks {
             return;
         }
         XposedBridge.hookAllMethods(windowClass, "removeWindow", new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                if (HookState.getContinuityOverlayView() != null && HookState.isReentryGraceActive()) {
+                    log("Allowing ScreenshotWindow.removeWindow while continuity overlay is active");
+                    return;
+                }
+                HookState.clearSuppressNextShelfReset();
+            }
+
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
                 log("ScreenshotWindow.removeWindow called; clearing cached window");
@@ -161,6 +197,133 @@ final class ScreenshotHooks {
         }
         border.setBackgroundColor(Color.RED);
         log("screenshot_preview_border tinted red");
+    }
+
+    private static void forcePreviewVisible(Object proxy) {
+        Object animationController = ReflectionHelpers.getObjectFieldIfExists(proxy, "animationController");
+        View shelfView = (View) ReflectionHelpers.getObjectFieldIfExists(proxy, "view");
+        Object screenshotPreviewObject = ReflectionHelpers.getObjectFieldIfExists(proxy, "screenshotPreview");
+        if (screenshotPreviewObject instanceof View) {
+            View screenshotPreview = (View) screenshotPreviewObject;
+            screenshotPreview.setAlpha(1.0f);
+            screenshotPreview.setVisibility(View.VISIBLE);
+        }
+        if (shelfView != null) {
+            shelfView.setAlpha(1.0f);
+            shelfView.setVisibility(View.VISIBLE);
+        }
+        Object flashView = ReflectionHelpers.getObjectFieldIfExists(animationController, "flashView");
+        if (flashView instanceof View) {
+            View flash = (View) flashView;
+            flash.setAlpha(0.0f);
+            flash.setVisibility(View.GONE);
+        }
+    }
+
+    private static void createContinuityOverlayFromShelf(View shelfView) {
+        if (shelfView.getWidth() <= 0 || shelfView.getHeight() <= 0) {
+            log("Skipping continuity overlay; shelf has no size");
+            return;
+        }
+        Object screenshotWindow = HookState.getScreenshotWindow();
+        Object phoneWindow = ReflectionHelpers.getObjectFieldIfExists(screenshotWindow, "window");
+        if (!(phoneWindow instanceof android.view.Window)) {
+            log("Skipping continuity overlay; screenshot PhoneWindow unavailable");
+            return;
+        }
+        Object context = ReflectionHelpers.callMethodIfExists(phoneWindow, "getContext");
+        if (context == null) {
+            log("Skipping continuity overlay; no window context");
+            return;
+        }
+
+        WindowManager windowManager = (WindowManager) ReflectionHelpers.callMethodIfExists(context,
+                "getSystemService", "window");
+        if (windowManager == null) {
+            log("Skipping continuity overlay; no WindowManager");
+            return;
+        }
+
+        int[] location = new int[2];
+        shelfView.getLocationInWindow(location);
+        Rect sourceRect = new Rect(location[0], location[1], location[0] + shelfView.getWidth(),
+                location[1] + shelfView.getHeight());
+        Bitmap snapshot = Bitmap.createBitmap(shelfView.getWidth(), shelfView.getHeight(), Bitmap.Config.ARGB_8888);
+
+        removeContinuityOverlay();
+        android.view.Window window = (android.view.Window) phoneWindow;
+        PixelCopy.request(window, sourceRect, snapshot, new PixelCopy.OnPixelCopyFinishedListener() {
+            @Override
+            public void onPixelCopyFinished(int copyResult) {
+                if (copyResult != PixelCopy.SUCCESS) {
+                    log("Continuity overlay PixelCopy failed: " + copyResult);
+                    return;
+                }
+                addContinuityOverlay(windowManager, (android.content.Context) context, snapshot, sourceRect);
+            }
+        }, MAIN_HANDLER);
+    }
+
+    private static void addContinuityOverlay(WindowManager windowManager, android.content.Context context,
+            Bitmap snapshot, Rect sourceRect) {
+        ImageView overlay = new ImageView((android.content.Context) context);
+        overlay.setImageBitmap(snapshot);
+        overlay.setScaleType(ImageView.ScaleType.FIT_XY);
+        overlay.setAlpha(1.0f);
+        overlay.setBackgroundColor(Color.TRANSPARENT);
+
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                sourceRect.width(),
+                sourceRect.height(),
+                2036,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT);
+        params.setTitle("ScreenshotDroidContinuity");
+        params.gravity = Gravity.TOP | Gravity.LEFT;
+        params.x = sourceRect.left;
+        params.y = sourceRect.top;
+        params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        params.setFitInsetsTypes(0);
+
+        try {
+            windowManager.addView(overlay, params);
+            HookState.setContinuityOverlay(overlay, windowManager);
+            scheduleContinuityOverlayRemoval();
+            log("Continuity overlay added");
+        } catch (Throwable t) {
+            log("Failed to add continuity overlay: " + t);
+        }
+    }
+
+    private static void scheduleContinuityOverlayRemoval() {
+        if (continuityOverlayRemoval != null) {
+            MAIN_HANDLER.removeCallbacks(continuityOverlayRemoval);
+        }
+        continuityOverlayRemoval = new Runnable() {
+            @Override
+            public void run() {
+                removeContinuityOverlay();
+            }
+        };
+        MAIN_HANDLER.postDelayed(continuityOverlayRemoval, CONTINUITY_OVERLAY_MS);
+    }
+
+    private static void removeContinuityOverlay() {
+        View overlay = HookState.getContinuityOverlayView();
+        WindowManager windowManager = HookState.getContinuityOverlayWindowManager();
+        HookState.clearContinuityOverlay();
+        HookState.clearSuppressNextShelfReset();
+        if (overlay == null || windowManager == null) {
+            return;
+        }
+        try {
+            windowManager.removeViewImmediate(overlay);
+            log("Continuity overlay removed");
+        } catch (Throwable t) {
+            log("Failed to remove continuity overlay: " + t);
+        }
     }
 
     private static Object resolveScreenshotSurface() {
@@ -278,8 +441,18 @@ final class ScreenshotHooks {
             Object builder = XposedHelpers.newInstance(captureArgsBuilderClass);
             XposedHelpers.callMethod(builder, "setSourceCrop", crop);
 
-            Object excludedSurfaces = Array.newInstance(surfaceControlClass, 1);
-            Array.set(excludedSurfaces, 0, screenshotSurface);
+            ArrayList<Object> surfacesToExclude = new ArrayList<>();
+            surfacesToExclude.add(screenshotSurface);
+            Object continuityOverlaySurface = HookState.getContinuityOverlaySurface();
+            if (isValidSurface(continuityOverlaySurface)) {
+                surfacesToExclude.add(continuityOverlaySurface);
+                log("Also excluding continuity overlay surface");
+            }
+
+            Object excludedSurfaces = Array.newInstance(surfaceControlClass, surfacesToExclude.size());
+            for (int i = 0; i < surfacesToExclude.size(); i++) {
+                Array.set(excludedSurfaces, i, surfacesToExclude.get(i));
+            }
             XposedHelpers.callMethod(builder, "setExcludeLayers", excludedSurfaces);
 
             Object captureArgs = XposedHelpers.callMethod(builder, "build");

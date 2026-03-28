@@ -133,4 +133,8 @@ hook(ImageCaptureImpl.captureDisplay) {
 - Reentry UX mitigation is now implemented:
   - if screenshot N's shelf is still attached when `handleScreenshot(...)` begins for screenshot N+1, the next `ScreenshotShelfViewProxy.reset()` is suppressed once
   - this is intended to keep screenshot N visible until screenshot N+1 is ready instead of clearing the shelf immediately
-- The remaining unverified piece is purely UX-level: confirm on the physical display that the shelf never visually blinks during screenshot N+1.
+- A newer continuity-overlay mitigation is also prototyped:
+  - on screenshot N+1, use `PixelCopy` to snapshot the visible old shelf
+  - add a temporary transparent overlay window at the same position
+  - remove it shortly after the new shelf is ready
+- The remaining unverified piece is still UX-level: confirm on the physical display that the shelf never visually blinks during screenshot N+1 for both hardware-key and gesture screenshot paths.

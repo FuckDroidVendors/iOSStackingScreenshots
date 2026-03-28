@@ -99,3 +99,15 @@
   - `Screenshot_20260328-031644_System-UI.png`
   - `Screenshot_20260328-031644_System-UI (1).png`
   - files were byte-identical (`sha256` and `cmp` matched), so exclusion still worked after the UX change
+- User reported the old shelf still disappeared visually, even after white-flash removal and reset suppression.
+- Replaced the main UX mitigation with a continuity-overlay prototype:
+  - on screenshot reentry, snapshot the currently visible shelf with `PixelCopy`
+  - place that snapshot into a temporary transparent `TYPE_SCREENSHOT` overlay window at the same on-screen bounds
+  - remove the temporary overlay after a short timeout
+  - continue excluding the stock `ScreenshotUI` surface from screenshot N+1
+- Fixed the first continuity-overlay attempt after it failed on hardware bitmaps during `View.draw(...)`; switched to `PixelCopy` from the real screenshot window instead.
+- Verified on-device from LSPosed logs that, on screenshot N+1:
+  - `Prepared continuity overlay for screenshot reentry` fired
+  - `Continuity overlay added` fired
+  - the overlay was later removed on its timeout
+- The visual result on the physical display still needs user confirmation; the reentry animation bypass log has not yet been observed on this ROM.
