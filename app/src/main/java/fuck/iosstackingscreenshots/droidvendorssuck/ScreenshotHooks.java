@@ -60,9 +60,6 @@ final class ScreenshotHooks {
     private static final float CARD_FRAME_INSET_DP = 2.0f;
     private static final long STACK_UI_SETTLE_DELAY_MS = 16L;
     private static final long PREVIEW_CHOOSER_HOLD_MS = 500L;
-    private static final long EDITOR_LAUNCH_WAIT_STEP_MS = 120L;
-    private static final long EDITOR_LAUNCH_WAIT_MAX_MS = 3000L;
-    private static final long EDITOR_LAUNCH_SETTLE_MS = 500L;
     private static final long EDITOR_REFRESH_WINDOW_MS = 8000L;
     private static final Executor DIRECT_EXECUTOR = new Executor() {
         @Override
@@ -80,7 +77,6 @@ final class ScreenshotHooks {
     private static volatile long lastPreviewClickHeldMs;
     private static volatile long lastPreviewClickRecordedAtMs;
     private static Runnable continuityOverlayRemoval;
-    private static Runnable pendingEditorLaunchRunnable;
 
     static {
         CARD_CONTENT_BACKGROUND_PAINT.setColor(IOS_CARD_BACKGROUND_COLOR);
@@ -451,39 +447,6 @@ final class ScreenshotHooks {
     }
 
     private static void launchMarkupEditor(View view) {
-        waitForPendingExportsAndLaunchEditor(view, 0L);
-    }
-
-    private static void waitForPendingExportsAndLaunchEditor(final View view, final long waitedMs) {
-        if (view == null) {
-            return;
-        }
-        int pendingExports = HookState.getPendingExportCountForCurrentBatch();
-        boolean batchSettled = HookState.hasBatchSettled(EDITOR_LAUNCH_SETTLE_MS);
-        int savedCount = HookState.getActiveSavedScreenshotCount();
-        int capturedCount = HookState.getCurrentBatchCaptureCount();
-        boolean capturesFullySaved = savedCount >= capturedCount;
-        if ((!batchSettled || pendingExports > 0 || !capturesFullySaved) && waitedMs < EDITOR_LAUNCH_WAIT_MAX_MS) {
-            if (pendingEditorLaunchRunnable != null) {
-                MAIN_HANDLER.removeCallbacks(pendingEditorLaunchRunnable);
-            }
-            final long nextWaitedMs = waitedMs + EDITOR_LAUNCH_WAIT_STEP_MS;
-            pendingEditorLaunchRunnable = new Runnable() {
-                @Override
-                public void run() {
-                    pendingEditorLaunchRunnable = null;
-                    waitForPendingExportsAndLaunchEditor(view, nextWaitedMs);
-                }
-            };
-            MAIN_HANDLER.postDelayed(pendingEditorLaunchRunnable, EDITOR_LAUNCH_WAIT_STEP_MS);
-            log("Delaying markup editor launch; pending exports=" + pendingExports
-                    + " batchSettled=" + batchSettled
-                    + " savedCount=" + savedCount
-                    + " capturedCount=" + capturedCount
-                    + " waitedMs=" + waitedMs);
-            return;
-        }
-        pendingEditorLaunchRunnable = null;
         launchMarkupEditorNow(view);
     }
 

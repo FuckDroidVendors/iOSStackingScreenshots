@@ -1,6 +1,14 @@
 # Work Log
 
 ## 2026-03-29
+- Changed the markup-editor burst UX from delayed launch to immediate launch with live batch extension:
+  - removed the pre-launch wait loop from [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java)
+  - kept the single-task editor reuse path and now refresh the running `MarkupEditorActivity` when late screenshot exports from the same burst finish saving
+  - preserved saved-batch tracking across editor-triggered shelf dismissal so late exports can still join the existing editor batch
+- Verified autonomously on-device:
+  - the editor opens immediately after tapping the screenshot stack
+  - follow-up `ImageExporter` completions log `Refreshed markup editor batch after late export`
+  - the running editor updates its subtitle/batch payload without spawning a second activity instance
 - Investigated rapid-burst stack tracking for the markup editor after a report that very fast screenshot bursts could open with fewer items than expected:
   - reproduced the race on-device by firing a 10-shot burst and opening the editor immediately, which initially produced cases like `9 of 10` and `5 of 10`
   - root cause was twofold in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java):
