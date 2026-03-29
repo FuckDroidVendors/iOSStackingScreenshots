@@ -170,9 +170,9 @@ That is why this repo targets the rooted/system path: hook SystemUI's real scree
 ## Current Architecture
 
 - Target process: `com.android.systemui:screenshot`
-- Entry point: [HookEntry.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/HookEntry.java)
-- Main hook logic: [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java)
-- Runtime state: [HookState.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/HookState.java)
+- Entry point: [HookEntry.java](app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/HookEntry.java)
+- Main hook logic: [ScreenshotHooks.java](app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java)
+- Runtime state: [HookState.java](app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/HookState.java)
 
 Current strategy:
 1. Let stock SystemUI own the screenshot shelf.
@@ -221,11 +221,11 @@ Practical completion view:
 ## Repository Notes
 
 Read these before substantial work:
-- [TODO.md](/home/duda/screenshotdroid/TODO.md)
-- [WORKLOG.md](/home/duda/screenshotdroid/WORKLOG.md)
-- [docs/android-screenshot-research.md](/home/duda/screenshotdroid/docs/android-screenshot-research.md)
-- [docs/android15-rooted-hook-plan.md](/home/duda/screenshotdroid/docs/android15-rooted-hook-plan.md)
-- [docs/lsposed-hook-blueprint.md](/home/duda/screenshotdroid/docs/lsposed-hook-blueprint.md)
+- [TODO.md](TODO.md)
+- [WORKLOG.md](WORKLOG.md)
+- [docs/android-screenshot-research.md](docs/android-screenshot-research.md)
+- [docs/android15-rooted-hook-plan.md](docs/android15-rooted-hook-plan.md)
+- [docs/lsposed-hook-blueprint.md](docs/lsposed-hook-blueprint.md)
 
 ## Target Environment
 
