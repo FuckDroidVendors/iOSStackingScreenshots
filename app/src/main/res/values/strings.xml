@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">ScreenshotDroid</string>
+    <string name="app_name">iOS Stacking Screenshots</string>
     <string name="module_description">Hooks SystemUI screenshots and excludes the screenshot shelf surface from future captures.</string>
 </resources>

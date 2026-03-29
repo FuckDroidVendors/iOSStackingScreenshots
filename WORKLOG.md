@@ -1,5 +1,56 @@
 # Work Log
 
+## 2026-03-29
+- Re-checked repository state before work. Untracked device artifacts remain:
+  - [INFO](/home/duda/screenshotdroid/INFO)
+  - [SystemUI.apk](/home/duda/screenshotdroid/SystemUI.apk)
+  - [framework.jar](/home/duda/screenshotdroid/framework.jar)
+  - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c)
+  - [services.jar](/home/duda/screenshotdroid/services.jar)
+- Re-read the current project docs and inspected the in-progress LSPosed hook changes before editing.
+- Continued the screenshot-batch deletion path in the rooted prototype:
+  - finished batch-aware saved-URI tracking in [HookState.java](/home/duda/screenshotdroid/app/src/main/java/dev/duda/screenshotdroid/HookState.java)
+  - registered each `ImageExporter.export(...)` future against the current screenshot batch
+  - treated a screenshot with no attached prior shelf as the start of a fresh batch in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/dev/duda/screenshotdroid/ScreenshotHooks.java)
+  - preserved left-swipe explicit dismissal behavior so already-saved screenshots are deleted immediately and late export completions from that same dismissed batch are also deleted
+- Attempted verification with `./gradlew :app:assembleDebug`, but sandbox limits prevented a full compile pass:
+  - default Gradle home hit a permission error on the wrapper lock under `/home/duda/.gradle`
+  - rerunning with `GRADLE_USER_HOME=/tmp/gradle-home` then failed because the sandbox blocks the wrapper's network download
+  - direct execution of the locally installed Gradle binary also failed in this environment while loading `libnative-platform.so`
+- Followed up with full-permission local tooling after the user confirmed Gradle and ADB access:
+  - built the module successfully with `./gradlew :app:assembleDebug`
+  - installed [app-debug.apk](/home/duda/screenshotdroid/app/build/outputs/apk/debug/app-debug.apk) to `192.168.2.56:5555`
+  - restarted `SystemUI` on-device so the updated LSPosed hook would reload
+- Added [README.md](/home/duda/screenshotdroid/README.md) with:
+  - current rooted-architecture and prototype status
+  - build/install instructions
+  - Android platform-constraint summary using the local offline docs mirror
+  - a feature map for the observed iOS screenshot UX and rough implementation difficulty on this LSPosed path
+- Updated module identity per user request:
+  - renamed the Java package / namespace / application id to `fuck.iosstackingscreenshots.droidvendorssuck`
+  - changed the visible app label to `iOS Stacking Screenshots`
+  - updated `xposed_init` and rebuilt successfully
+  - reinstalled the renamed APK and restarted `SystemUI`
+- Revised [README.md](/home/duda/screenshotdroid/README.md) again:
+  - removed local offline-doc references in favor of public Android documentation URLs
+  - added a short quick-install section
+- Verified and fixed LSPosed state for the renamed package:
+  - confirmed the old package had been removed from the device
+  - inspected `/data/adb/lspd/config/modules_config.db`
+  - found the renamed module installed but disabled and missing `com.android.systemui` scope
+  - enabled `fuck.iosstackingscreenshots.droidvendorssuck` and inserted `com.android.systemui` user `0` scope
+  - restarted `SystemUI` after the scope change
+- Added a tap-to-toast debug interaction in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java):
+  - tapping the front screenshot preview now shows a short toast
+  - the toast includes burst count when multiple screenshots are stacked
+- Rebuilt and reinstalled the updated APK, then restarted `SystemUI` again.
+- Expanded [README.md](/home/duda/screenshotdroid/README.md) into a zero-to-active ADB deployment guide, including:
+  - build/install steps
+  - old-package cleanup
+  - LSPosed activation and scope setup
+  - `SystemUI` restart instructions
+  - when a full reboot may still be necessary
+
 ## 2026-03-28
 - Re-checked repository state before work. Untracked device artifacts remain:
   - [INFO](/home/duda/screenshotdroid/INFO)
@@ -20,6 +71,10 @@
   - decompiled the local `SystemUI.apk` with `jadx` and confirmed `ScreenshotController` sets `screenshotHandler.mDefaultTimeout = 3000`
   - changed the LSPosed hook to override that stock timeout to `5000 ms` in `ScreenshotController` construction instead of intercepting `SCREENSHOT_INTERACTION_TIMEOUT`
   - removed the custom delayed-dismiss helper so stock dismissal animation and input teardown run on the normal SystemUI path
+- Started swipe-to-delete behavior for active screenshot batches:
+  - hooked `ImageExporter.export(...)` to track the saved `Uri` for each screenshot in the active SystemUI batch
+  - detect `SCREENSHOT_EXPLICIT_DISMISSAL` with negative swipe velocity as a left-swipe delete gesture
+  - on left-swipe dismissal, delete the tracked batch `Uri`s through `ContentResolver` and also delete any late-arriving export result from the same batch
 
 ## 2026-03-28
 - Re-checked repository state before work. Untracked device artifacts remain:

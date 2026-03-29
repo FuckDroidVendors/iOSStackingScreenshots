@@ -1,4 +1,4 @@
-package dev.duda.screenshotdroid;
+package fuck.iosstackingscreenshots.droidvendorssuck;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;

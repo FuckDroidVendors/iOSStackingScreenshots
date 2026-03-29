@@ -1,4 +1,4 @@
-package dev.duda.screenshotdroid;
+package fuck.iosstackingscreenshots.droidvendorssuck;
 
 import android.animation.AnimatorSet;
 import android.graphics.Bitmap;
@@ -8,6 +8,7 @@ import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.net.Uri;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -21,16 +22,18 @@ import android.view.View.MeasureSpec;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.ImageView;
+import android.widget.Toast;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 final class ScreenshotHooks {
-    private static final String TAG = "ScreenshotDroid";
+    private static final String TAG = "iOSStackingShots";
     private static final long CONTINUITY_OVERLAY_MS = 1200L;
     private static final long CONTINUITY_HANDOFF_MS = 96L;
     private static final int SCREENSHOT_TIMEOUT_MS = 5000;
@@ -38,7 +41,7 @@ final class ScreenshotHooks {
     private static final Paint CARD_BITMAP_PAINT =
             new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private static final Paint CARD_CONTENT_BACKGROUND_PAINT = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private static final String STACK_CARD_TAG_PREFIX = "ScreenshotDroidStackCard";
+    private static final String STACK_CARD_TAG_PREFIX = "IOSStackingShotsCard";
     private static final int IOS_FRAME_COLOR = Color.parseColor("#FFFFFF");
     private static final int IOS_FRAME_STROKE_COLOR = Color.parseColor("#D6D9DE");
     private static final int IOS_CARD_BACKGROUND_COLOR = Color.BLACK;
@@ -48,6 +51,12 @@ final class ScreenshotHooks {
     private static final float CARD_MAX_HEIGHT_DP = 160.0f;
     private static final float CARD_FRAME_INSET_DP = 2.0f;
     private static final long STACK_UI_SETTLE_DELAY_MS = 16L;
+    private static final Executor DIRECT_EXECUTOR = new Executor() {
+        @Override
+        public void execute(Runnable command) {
+            command.run();
+        }
+    };
     private static final ArrayList<Drawable> overlayStackCards = new ArrayList<>();
     private static volatile boolean installed;
     private static Runnable continuityOverlayRemoval;
@@ -70,6 +79,7 @@ final class ScreenshotHooks {
         hookScreenshotCallbacks(classLoader);
         hookScreenshotShelfBinder(classLoader);
         hookScreenshotWindow(classLoader);
+        hookImageExporter(classLoader);
         hookImageCapture(classLoader);
     }
 
@@ -91,6 +101,7 @@ final class ScreenshotHooks {
                 HookState.setScreenshotShelfView(shelfView);
                 log("ScreenshotShelfViewProxy constructed; tinting preview border");
                 tintPreviewBorder(shelfView);
+                installPreviewTapToast(shelfView);
                 hideShelfChrome(shelfView);
             }
         });
@@ -132,6 +143,7 @@ final class ScreenshotHooks {
                     if (bitmap instanceof Bitmap) {
                         forceCurrentPreviewBitmap(shelfView, (Bitmap) bitmap);
                     }
+                    installPreviewTapToast(shelfView);
                     hideShelfChrome(shelfView);
                     scheduleStackUiUpdate(shelfView);
                 }
@@ -142,6 +154,14 @@ final class ScreenshotHooks {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
                 String eventName = String.valueOf(param.args[0]);
+                if ("SCREENSHOT_EXPLICIT_DISMISSAL".equals(eventName)) {
+                    Float velocity = param.args.length > 1 && param.args[1] instanceof Float
+                            ? (Float) param.args[1] : null;
+                    if (velocity != null && velocity.floatValue() < 0.0f) {
+                        log("Deleting active screenshot batch after left-swipe dismissal");
+                        deleteSavedScreenshotBatch(HookState.markSavedBatchForDeletion());
+                    }
+                }
                 if ("SCREENSHOT_DISMISSED_OTHER".equals(eventName)) {
                     log("Ignoring stock dismissal event " + eventName);
                     param.setResult(null);
@@ -192,6 +212,7 @@ final class ScreenshotHooks {
                     log("Armed screenshot reentry without continuity overlay");
                 } else {
                     HookState.clearReentryGrace();
+                    HookState.beginFreshBatch();
                     HookState.clearPreviewStack();
                 }
             }
@@ -297,6 +318,58 @@ final class ScreenshotHooks {
                 });
     }
 
+    private static void hookImageExporter(ClassLoader classLoader) {
+        Class<?> imageExporterClass = XposedHelpers.findClassIfExists(
+                "com.android.systemui.screenshot.ImageExporter", classLoader);
+        if (imageExporterClass == null) {
+            log("ImageExporter not found");
+            return;
+        }
+        XposedBridge.hookAllMethods(imageExporterClass, "export", new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                final Object safeFuture = param.getResult();
+                if (safeFuture == null) {
+                    return;
+                }
+                final Object delegate = ReflectionHelpers.getObjectFieldIfExists(safeFuture, "delegate");
+                if (delegate == null) {
+                    return;
+                }
+                final int batchId = HookState.getCurrentBatchId();
+                HookState.registerExportFuture(delegate, batchId);
+                try {
+                    XposedHelpers.callMethod(delegate, "addListener", new Runnable() {
+                        @Override
+                        public void run() {
+                            onImageExportCompleted(delegate);
+                        }
+                    }, DIRECT_EXECUTOR);
+                } catch (Throwable t) {
+                    log("Failed to attach ImageExporter listener: " + t);
+                }
+            }
+        });
+    }
+
+    private static void onImageExportCompleted(Object futureDelegate) {
+        try {
+            Object result = XposedHelpers.callMethod(futureDelegate, "get");
+            Object uriObject = ReflectionHelpers.getObjectFieldIfExists(result, "uri");
+            if (!(uriObject instanceof Uri)) {
+                return;
+            }
+            Uri uri = (Uri) uriObject;
+            if (HookState.recordSavedScreenshotUri(futureDelegate, uri)) {
+                deleteSavedScreenshotUri(uri);
+            } else {
+                log("Tracked saved screenshot uri " + uri);
+            }
+        } catch (Throwable t) {
+            log("Failed to read ImageExporter result: " + t);
+        }
+    }
+
     private static void tintPreviewBorder(View shelfView) {
         ImageView preview = findImageView(shelfView, "screenshot_preview");
         if (preview != null) {
@@ -317,6 +390,26 @@ final class ScreenshotHooks {
             }
         }
         log("screenshot chrome styled with white frame and black card fill");
+    }
+
+    private static void installPreviewTapToast(View shelfView) {
+        final ImageView preview = findImageView(shelfView, "screenshot_preview");
+        if (preview == null) {
+            return;
+        }
+        preview.setClickable(true);
+        preview.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                int stackCount = HookState.getStackBitmaps().size();
+                int totalCount = stackCount + (HookState.getLastPreviewBitmap() != null ? 1 : 0);
+                String message = totalCount > 1
+                        ? "Tapped screenshot stack (" + totalCount + ")"
+                        : "Tapped screenshot";
+                Toast.makeText(v.getContext(), message, Toast.LENGTH_SHORT).show();
+                log("Preview tapped; showed toast for count=" + totalCount);
+            }
+        });
     }
 
     private static void hideShelfChrome(View shelfView) {
@@ -798,6 +891,44 @@ final class ScreenshotHooks {
         }, MAIN_HANDLER);
     }
 
+    private static void deleteSavedScreenshotBatch(List<Uri> uris) {
+        for (Uri uri : uris) {
+            deleteSavedScreenshotUri(uri);
+        }
+    }
+
+    private static void deleteSavedScreenshotUri(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        try {
+            android.content.Context context = resolveScreenshotContext();
+            if (context == null) {
+                log("Unable to delete screenshot uri; no screenshot context for " + uri);
+                return;
+            }
+            int deleted = context.getContentResolver().delete(uri, null, null);
+            HookState.removeSavedScreenshotUri(uri);
+            log("Deleted screenshot uri " + uri + " count=" + deleted);
+        } catch (Throwable t) {
+            log("Failed to delete screenshot uri " + uri + ": " + t);
+        }
+    }
+
+    private static android.content.Context resolveScreenshotContext() {
+        Object screenshotWindow = HookState.getScreenshotWindow();
+        Object phoneWindow = ReflectionHelpers.getObjectFieldIfExists(screenshotWindow, "window");
+        Object context = ReflectionHelpers.callMethodIfExists(phoneWindow, "getContext");
+        if (context instanceof android.content.Context) {
+            return (android.content.Context) context;
+        }
+        View shelfView = HookState.getScreenshotShelfView();
+        if (shelfView != null) {
+            return shelfView.getContext();
+        }
+        return null;
+    }
+
     private static void addContinuityOverlay(WindowManager windowManager, android.content.Context context,
             Bitmap snapshot, Rect sourceRect) {
         if (HookState.hasReentryPreviewBound()) {
@@ -818,7 +949,7 @@ final class ScreenshotHooks {
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
-        params.setTitle("ScreenshotDroidContinuity");
+        params.setTitle("IOSStackingShotsContinuity");
         params.gravity = Gravity.TOP | Gravity.LEFT;
         params.x = sourceRect.left;
         params.y = sourceRect.top;

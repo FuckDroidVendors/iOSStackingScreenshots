@@ -1,17 +1,19 @@
-package dev.duda.screenshotdroid;
+package fuck.iosstackingscreenshots.droidvendorssuck;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.net.Uri;
 import android.util.Log;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
 import android.view.View;
 import android.view.WindowManager;
 
 final class HookState {
-    private static final String TAG = "ScreenshotDroid";
+    private static final String TAG = "iOSStackingShots";
     private static final long REENTRY_GRACE_MS = 1500L;
     private static final int MAX_STACK_BITMAPS = 3;
     private static final int MAX_STACK_EDGE_PX = 640;
@@ -24,9 +26,14 @@ final class HookState {
     private static volatile WeakReference<WindowManager> continuityOverlayWindowManagerRef =
             new WeakReference<>(null);
     private static volatile Bitmap lastPreviewBitmap;
+    private static volatile Uri lastSavedScreenshotUri;
     private static final ArrayList<Bitmap> previewStack = new ArrayList<>();
+    private static final ArrayList<Uri> activeSavedScreenshotUris = new ArrayList<>();
+    private static final IdentityHashMap<Object, Integer> exportBatchIds = new IdentityHashMap<>();
     private static volatile long reentryArmedAtMs;
     private static volatile boolean reentryPreviewBound;
+    private static volatile int currentBatchId = 1;
+    private static volatile int pendingDeletionBatchId = -1;
 
     private HookState() {
     }
@@ -80,6 +87,73 @@ final class HookState {
         return lastPreviewBitmap;
     }
 
+    static void setLastSavedScreenshotUri(Uri uri) {
+        lastSavedScreenshotUri = uri;
+    }
+
+    static Uri getLastSavedScreenshotUri() {
+        return lastSavedScreenshotUri;
+    }
+
+    static synchronized void beginFreshBatch() {
+        currentBatchId++;
+        pendingDeletionBatchId = -1;
+        activeSavedScreenshotUris.clear();
+        exportBatchIds.clear();
+        lastSavedScreenshotUri = null;
+    }
+
+    static synchronized int getCurrentBatchId() {
+        return currentBatchId;
+    }
+
+    static synchronized void registerExportFuture(Object futureDelegate, int batchId) {
+        if (futureDelegate == null) {
+            return;
+        }
+        exportBatchIds.put(futureDelegate, batchId);
+    }
+
+    static synchronized boolean recordSavedScreenshotUri(Object futureDelegate, Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        Integer batchId = futureDelegate == null ? null : exportBatchIds.remove(futureDelegate);
+        int resolvedBatchId = batchId != null ? batchId : currentBatchId;
+        lastSavedScreenshotUri = uri;
+        if (resolvedBatchId == pendingDeletionBatchId) {
+            return true;
+        }
+        if (resolvedBatchId != currentBatchId) {
+            return false;
+        }
+        if (!activeSavedScreenshotUris.contains(uri)) {
+            activeSavedScreenshotUris.add(uri);
+        }
+        return false;
+    }
+
+    static synchronized List<Uri> markSavedBatchForDeletion() {
+        pendingDeletionBatchId = currentBatchId;
+        ArrayList<Uri> uris = new ArrayList<>(activeSavedScreenshotUris);
+        activeSavedScreenshotUris.clear();
+        return uris;
+    }
+
+    static synchronized void removeSavedScreenshotUri(Uri uri) {
+        activeSavedScreenshotUris.remove(uri);
+        if (uri != null && uri.equals(lastSavedScreenshotUri)) {
+            lastSavedScreenshotUri = null;
+        }
+    }
+
+    static synchronized void clearSavedScreenshotTracking() {
+        pendingDeletionBatchId = -1;
+        activeSavedScreenshotUris.clear();
+        exportBatchIds.clear();
+        lastSavedScreenshotUri = null;
+    }
+
     static synchronized void pushStackBitmap(Bitmap bitmap) {
         if (bitmap == null) {
             Log.i(TAG, "pushStackBitmap: source bitmap was null");
@@ -108,6 +182,7 @@ final class HookState {
         }
         previewStack.clear();
         lastPreviewBitmap = null;
+        clearSavedScreenshotTracking();
     }
 
     static void armReentryGrace() {
