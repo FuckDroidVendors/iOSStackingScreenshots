@@ -289,18 +289,12 @@ final class ScreenshotHooks {
 
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
-                log("ScreenshotWindow.removeWindow called; clearing cached window");
-                HookState.clearScreenshotWindow(param.thisObject);
+                log("ScreenshotWindow.removeWindow called; preserving cached window for reuse");
                 if (!HookState.isReentryGraceActive()) {
                     HookState.clearPreviewStack();
                     View shelfView = HookState.getScreenshotShelfView();
                     if (shelfView != null) {
-                        shelfView.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                clearStackUi(shelfView);
-                            }
-                        });
+                        clearStackUi(shelfView);
                     }
                 }
             }

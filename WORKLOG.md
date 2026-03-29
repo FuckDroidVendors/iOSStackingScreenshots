@@ -1,6 +1,15 @@
 # Work Log
 
 ## 2026-03-29
+- Investigated and fixed a post-editor shelf-position regression in the stacked screenshot preview:
+  - reproduction showed the thumbnail could shift partly off-screen after opening the markup editor, closing it, and taking screenshots again
+  - root cause was the `ScreenshotWindow.removeWindow()` hook treating the window as disposable even though this ROM reuses the same `ScreenshotWindow` / shelf objects after editor handoff
+  - clearing the cached window reference broke later excluded-layer capture lookup, and deferring `clearStackUi(...)` with `shelfView.post(...)` let stale preview transform state survive into the reused shelf
+  - fixed [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java) to preserve the cached `ScreenshotWindow` across `removeWindow()` and clear the stacked UI synchronously when the editor dismisses the shelf
+- Verified autonomously on-device after rebuilding, reinstalling, and restarting `SystemUI`:
+  - baseline repeated screenshots and post-editor repeated screenshots now land in the same lower-left position again
+  - the follow-up screenshot after leaving the editor once again resolves the cached `ScreenshotWindow` surface and uses the excluded-layer capture path
+  - the markup editor process was force-stopped after each automated test run to avoid cross-test contamination
 - Finished the first batch-aware markup-editor handoff and navigation pass:
   - `ScreenshotHooks.java` now forwards the full active screenshot batch into `MarkupEditorActivity`, grants read access for every `Uri` via batch `ClipData`, and dismisses the SystemUI screenshot shelf once the editor takes over
   - `MarkupEditorActivity.java` now reuses a single task instance, accepts batch extras in `onNewIntent(...)`, and supports left/right swipe paging across the saved screenshots
