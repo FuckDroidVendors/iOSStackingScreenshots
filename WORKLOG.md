@@ -1,6 +1,43 @@
 # Work Log
 
 ## 2026-03-29
+- Finished the first batch-aware markup-editor handoff and navigation pass:
+  - `ScreenshotHooks.java` now forwards the full active screenshot batch into `MarkupEditorActivity`, grants read access for every `Uri` via batch `ClipData`, and dismisses the SystemUI screenshot shelf once the editor takes over
+  - `MarkupEditorActivity.java` now reuses a single task instance, accepts batch extras in `onNewIntent(...)`, and supports left/right swipe paging across the saved screenshots
+  - `HookState.java` now exposes a copy of the active saved-screenshot `Uri` list so the editor can preserve stack context after the shelf is dismissed
+- Verified autonomously on-device after rebuilding, reinstalling, and restarting `SystemUI`:
+  - opening the editor from a 2-shot stack removes `ScreenshotUI` from the active window list
+  - the editor subtitle reports `Showing 1 of 2` on open
+  - a left swipe advances to `Showing 2 of 2` without the previous decode failure
+  - repeated launch attempts do not create a second `MarkupEditorActivity` instance; the same task/activity record remains active
+- Followed up on the markup editor task behavior after device testing showed it still appeared in recents:
+  - kept `android:excludeFromRecents="true"` on the activity
+  - also added `Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS` at launch time in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java) so the task is marked correctly even when started from `SystemUI`
+- Re-enabled markup editor launch on short tap in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java) after the tap interception path was validated on-device.
+- Preserved the hold gesture as the explicit route to the stock chooser, now with the tuned `500 ms` threshold.
+- Reduced the deliberate chooser hold threshold from `2500 ms` to `500 ms` in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java) after follow-up tuning.
+- Fixed the broken tap-interception hook in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java):
+  - the earlier `ScreenshotShelfView.dispatchTouchEvent(...)` hook was failing on-device with `NoSuchMethodError`
+  - replaced it with a `View.dispatchTouchEvent(...)` hook filtered to `screenshot_preview` and `screenshot_scrolling_scrim`
+  - this avoids relying on a method that is inherited rather than declared on this ROM's shelf view class
+- Removed module-resource lookup from the short-tap toast path:
+  - `Toast.makeText(..., R.string.preview_hold_for_actions, ...)` was throwing `Resources$NotFoundException` inside the `com.android.systemui:screenshot` process
+  - switched the temporary fallback toast to a literal string so it works reliably from the hooked process context
+- Rebuilt, reinstalled, and restarted `SystemUI`, then verified autonomously over ADB:
+  - short tap on the shelf touch region now logs `Preview tap intercepted` and `Preview tap consumed; waiting for deliberate hold before stock actions`
+  - a `3000 ms` stationary swipe on the same region logs `Preview hold reached chooser threshold at 2503ms`
+  - that long hold then launches `android/com.android.internal.app.ResolverActivity`, confirming the stock chooser path is still reachable only via deliberate hold
+- Increased the stock screenshot shelf timeout override from `5000 ms` to `15000 ms` in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java) so the thumbnail remains visible long enough for autonomous ADB-driven interaction tests.
+- Investigated why tapping the stacked screenshot shelf still opened the stock chooser instead of the custom editor/toast path.
+- Root cause found in the interaction hooks:
+  - touch duration was being recorded in `ScreenshotShelfView.dispatchTouchEvent(...)`
+  - but the stock click path was still allowed to run, so short taps could still reach the chooser
+- Reworked [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java) to use a stricter fallback interaction model:
+  - preview/scrim touch sequences are now consumed directly in the shelf touch hook
+  - short tap shows a toast hint instead of falling through to stock actions
+  - stock chooser is only synthesized after a deliberate `2500 ms` hold on the preview stack
+  - kept the `PreviewAction` wrapper as a second guard so unplanned short-click paths are still intercepted
+- Added [strings.xml](/home/duda/screenshotdroid/app/src/main/res/values/strings.xml) text for the temporary tap hint: `Tap ignored. Hold for actions.`
 - Re-checked repository state before work. Untracked device artifacts remain:
   - [INFO](/home/duda/screenshotdroid/INFO)
   - [SystemUI.apk](/home/duda/screenshotdroid/SystemUI.apk)

@@ -20,12 +20,14 @@
 - [ ] If any blink remains, move the continuity snapshot earlier or seed it from a cached previous shelf snapshot instead of waiting for reentry-time `PixelCopy`.
 - [ ] Verify on-device that the stacked shelf renders correctly for 2-shot and 3-shot bursts, including the count badge and rear-card offsets.
 - [ ] Decide the first batch interaction model for the stacked shelf (tap/edit/share latest screenshot only vs explicit batch-aware affordances).
-- [x] Replace the short-tap debug toast with a first-cut markup editor launch for the latest saved screenshot.
+- [x] Re-enable short-tap markup editor launch once the preview stack tap/hold routing is reliable on-device.
+- [x] Add a safe fallback interaction model where short tap is consumed locally and the stock chooser only appears after a deliberate multi-second hold.
 - [ ] Add upper-right share action to the markup editor and route it through the Android share sheet for the edited screenshot output.
 - [ ] Add save-vs-delete confirmation when leaving the markup editor via `Done`.
 - [ ] Implement actual editor tools: freehand pen/highlighter, colors, stroke width, and basic shape insertion.
 - [ ] Turn the current static crop handles into real draggable crop bounds with corner and edge affordances.
-- [ ] Decide whether batch editing should open only the newest screenshot first or support stack navigation inside the editor.
+- [x] Decide whether batch editing should open only the newest screenshot first or support stack navigation inside the editor.
+- [ ] Add clearer visual paging affordances to the markup editor now that left/right swipe navigation is live.
 - [ ] Define the editor document model and sidecar format for non-destructive edits.
 - [ ] Keep the editor layout native XML and the edit document data-driven; defer any Lua/JS scripting surface until the core tool model is stable.
 - [ ] Determine whether excluding the whole `ScreenshotUI` window removes any stock controls that should remain in the final UX.

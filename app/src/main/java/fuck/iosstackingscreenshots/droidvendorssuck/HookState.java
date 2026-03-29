@@ -95,6 +95,10 @@ final class HookState {
         return lastSavedScreenshotUri;
     }
 
+    static synchronized List<Uri> getActiveSavedScreenshotUris() {
+        return new ArrayList<>(activeSavedScreenshotUris);
+    }
+
     static synchronized void beginFreshBatch() {
         currentBatchId++;
         pendingDeletionBatchId = -1;

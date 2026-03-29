@@ -5,14 +5,18 @@
     <string name="editor_done">Done</string>
     <string name="editor_loading_state">Loading screenshot…</string>
     <string name="editor_ready_subtitle">First cut editor shell: screenshot stage only. Done closes the view.</string>
+    <string name="editor_loading_batch_subtitle">Loading %1$d of %2$d…</string>
+    <string name="editor_ready_batch_subtitle">Swipe left or right to move through %2$d screenshots. Showing %1$d of %2$d.</string>
     <string name="editor_empty_state">No screenshot selected.</string>
     <string name="editor_empty_subtitle">Open the editor from the screenshot stack once a screenshot has finished saving.</string>
     <string name="editor_failed_state">Could not open screenshot.</string>
     <string name="editor_failed_subtitle">The saved image URI could not be decoded in the editor.</string>
+    <string name="editor_failed_batch_subtitle">Could not load %1$d of %2$d.</string>
     <string name="editor_uri_label">Source: %1$s</string>
     <string name="editor_tool_pen">Pen</string>
     <string name="editor_tool_crop">Crop</string>
     <string name="editor_tool_shapes">Shapes</string>
     <string name="editor_tool_colors">Colors</string>
     <string name="editor_not_ready">Screenshot is still saving.</string>
+    <string name="preview_hold_for_actions">Tap ignored. Hold for actions.</string>
 </resources>

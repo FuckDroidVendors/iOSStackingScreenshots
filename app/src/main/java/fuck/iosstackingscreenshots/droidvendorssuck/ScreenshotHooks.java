@@ -1,6 +1,7 @@
 package fuck.iosstackingscreenshots.droidvendorssuck;
 
 import android.animation.AnimatorSet;
+import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -18,7 +19,6 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.ViewConfiguration;
 import android.view.Gravity;
 import android.view.PixelCopy;
 import android.view.View;
@@ -29,10 +29,12 @@ import android.widget.ImageView;
 import android.widget.Toast;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Array;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.WeakHashMap;
 import java.util.concurrent.Executor;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -42,7 +44,7 @@ final class ScreenshotHooks {
     private static final String TAG = "iOSStackingShots";
     private static final long CONTINUITY_OVERLAY_MS = 1200L;
     private static final long CONTINUITY_HANDOFF_MS = 96L;
-    private static final int SCREENSHOT_TIMEOUT_MS = 5000;
+    private static final int SCREENSHOT_TIMEOUT_MS = 15000;
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final Paint CARD_BITMAP_PAINT =
             new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -57,6 +59,7 @@ final class ScreenshotHooks {
     private static final float CARD_MAX_HEIGHT_DP = 160.0f;
     private static final float CARD_FRAME_INSET_DP = 2.0f;
     private static final long STACK_UI_SETTLE_DELAY_MS = 16L;
+    private static final long PREVIEW_CHOOSER_HOLD_MS = 500L;
     private static final Executor DIRECT_EXECUTOR = new Executor() {
         @Override
         public void execute(Runnable command) {
@@ -64,11 +67,14 @@ final class ScreenshotHooks {
         }
     };
     private static final ArrayList<Drawable> overlayStackCards = new ArrayList<>();
-    private static final WeakHashMap<View, View.OnClickListener> originalPreviewClickListeners =
-            new WeakHashMap<>();
     private static volatile boolean installed;
     private static volatile WeakReference<View> activePreviewTouchViewRef = new WeakReference<>(null);
     private static volatile long activePreviewTouchDownMs;
+    private static volatile boolean activePreviewLongPressTriggered;
+    private static Runnable activePreviewLongPressRunnable;
+    private static volatile WeakReference<View> lastPreviewClickTargetRef = new WeakReference<>(null);
+    private static volatile long lastPreviewClickHeldMs;
+    private static volatile long lastPreviewClickRecordedAtMs;
     private static Runnable continuityOverlayRemoval;
 
     static {
@@ -89,7 +95,7 @@ final class ScreenshotHooks {
         hookScreenshotCallbacks(classLoader);
         hookScreenshotShelfBinder(classLoader);
         hookPreviewTouchRouting(classLoader);
-        hookPreviewClickBinding();
+        hookPreviewActionModel(classLoader);
         hookScreenshotWindow(classLoader);
         hookImageExporter(classLoader);
         hookImageCapture(classLoader);
@@ -114,6 +120,7 @@ final class ScreenshotHooks {
                 log("ScreenshotShelfViewProxy constructed; tinting preview border");
                 tintPreviewBorder(shelfView);
                 hideShelfChrome(shelfView);
+                installPreviewTapToast(shelfView);
             }
         });
         XposedHelpers.findAndHookMethod(proxyClass, "createScreenshotDropInAnimation", Rect.class, boolean.class,
@@ -412,8 +419,8 @@ final class ScreenshotHooks {
     }
 
     private static void showPreviewTapToast(View view) {
-        Toast.makeText(view.getContext(), R.string.editor_not_ready, Toast.LENGTH_SHORT).show();
-        log("Preview tapped before saved screenshot uri was ready");
+        Toast.makeText(view.getContext(), "Tap ignored. Hold for actions.", Toast.LENGTH_SHORT).show();
+        log("Preview tap consumed; waiting for deliberate hold before stock actions");
     }
 
     private static void launchMarkupEditor(View view) {
@@ -424,14 +431,23 @@ final class ScreenshotHooks {
         }
         try {
             Context context = view.getContext();
+            ArrayList<Uri> editorBatch = buildEditorBatch(screenshotUri);
             Intent intent = new Intent();
             intent.setComponent(new ComponentName(
                     "fuck.iosstackingscreenshots.droidvendorssuck",
                     MarkupEditorActivity.class.getName()));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                    | Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.setData(screenshotUri);
+            intent.setClipData(buildEditorClipData(editorBatch));
             intent.putExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_URI, screenshotUri);
+            intent.putParcelableArrayListExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_BATCH_URIS, editorBatch);
+            intent.putExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_INDEX, 0);
             context.startActivity(intent);
+            dismissScreenshotShelf();
             log("Launched markup editor for " + screenshotUri);
         } catch (Throwable t) {
             log("Failed to launch markup editor: " + t);
@@ -439,111 +455,173 @@ final class ScreenshotHooks {
         }
     }
 
-    private static void hookPreviewTouchRouting(ClassLoader classLoader) {
-        Class<?> shelfViewClass = XposedHelpers.findClassIfExists(
-                "com.android.systemui.screenshot.ui.ScreenshotShelfView", classLoader);
-        if (shelfViewClass == null) {
-            log("ScreenshotShelfView not found");
+    private static ArrayList<Uri> buildEditorBatch(Uri selectedUri) {
+        ArrayList<Uri> batch = new ArrayList<>(HookState.getActiveSavedScreenshotUris());
+        if (batch.isEmpty()) {
+            batch.add(selectedUri);
+            return batch;
+        }
+        if (!batch.contains(selectedUri)) {
+            batch.add(selectedUri);
+        }
+        Collections.reverse(batch);
+        return batch;
+    }
+
+    private static ClipData buildEditorClipData(List<Uri> batchUris) {
+        if (batchUris == null || batchUris.isEmpty()) {
+            return null;
+        }
+        ClipData clipData = new ClipData(
+                "screenshot-batch",
+                new String[]{"image/*"},
+                new ClipData.Item(batchUris.get(0)));
+        for (int i = 1; i < batchUris.size(); i++) {
+            clipData.addItem(new ClipData.Item(batchUris.get(i)));
+        }
+        return clipData;
+    }
+
+    private static void dismissScreenshotShelf() {
+        Object screenshotWindow = HookState.getScreenshotWindow();
+        if (screenshotWindow == null) {
             return;
         }
-        XposedHelpers.findAndHookMethod(shelfViewClass, "dispatchTouchEvent", android.view.MotionEvent.class,
+        try {
+            XposedHelpers.callMethod(screenshotWindow, "removeWindow");
+            log("Dismissed screenshot shelf after handing off to markup editor");
+        } catch (Throwable t) {
+            log("Failed to dismiss screenshot shelf after editor launch: " + t);
+        }
+    }
+
+    private static void hookPreviewTouchRouting(ClassLoader classLoader) {
+        XposedHelpers.findAndHookMethod(View.class, "dispatchTouchEvent", android.view.MotionEvent.class,
                 new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
                         if (!(param.thisObject instanceof View) || !(param.args[0] instanceof android.view.MotionEvent)) {
                             return;
                         }
-                        View shelfView = (View) param.thisObject;
+                        View targetView = (View) param.thisObject;
+                        if (!isScreenshotPreviewClickView(targetView)) {
+                            return;
+                        }
                         android.view.MotionEvent event = (android.view.MotionEvent) param.args[0];
-                        View previewView = findImageView(shelfView, "screenshot_preview");
-                        if (previewView == null) {
+                        View activeView = activePreviewTouchViewRef.get();
+                        if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN
+                                && !isPointInsideView(targetView, event.getRawX(), event.getRawY())) {
                             clearActivePreviewTouch();
                             return;
                         }
                         int action = event.getActionMasked();
                         switch (action) {
                             case android.view.MotionEvent.ACTION_DOWN:
-                                if (!isPointInsideView(previewView, event.getRawX(), event.getRawY())) {
-                                    clearActivePreviewTouch();
-                                    return;
-                                }
-                                activePreviewTouchViewRef = new WeakReference<>(previewView);
+                                activePreviewTouchViewRef = new WeakReference<>(targetView);
                                 activePreviewTouchDownMs = event.getEventTime();
+                                activePreviewLongPressTriggered = false;
+                                schedulePreviewLongPress(targetView);
                                 param.setResult(Boolean.TRUE);
                                 return;
                             case android.view.MotionEvent.ACTION_MOVE:
-                                if (activePreviewTouchViewRef.get() == previewView) {
-                                    param.setResult(Boolean.TRUE);
+                                if (activeView == null || activeView != targetView) {
+                                    clearActivePreviewTouch();
                                 }
+                                param.setResult(Boolean.TRUE);
                                 return;
                             case android.view.MotionEvent.ACTION_UP:
-                                if (activePreviewTouchViewRef.get() != previewView) {
+                                if (activeView == null) {
+                                    clearActivePreviewTouch();
+                                    param.setResult(Boolean.TRUE);
                                     return;
                                 }
-                                long heldMs = event.getEventTime() - activePreviewTouchDownMs;
-                                View.OnClickListener stockListener = originalPreviewClickListeners.get(previewView);
+                                long heldMs = Math.max(0L, event.getEventTime() - activePreviewTouchDownMs);
+                                boolean longPressTriggered = activePreviewLongPressTriggered;
                                 clearActivePreviewTouch();
-                                if (heldMs >= ViewConfiguration.getLongPressTimeout() && stockListener != null) {
-                                    log("Shelf routed preview hold=" + heldMs + "ms to stock action");
-                                    stockListener.onClick(previewView);
-                                } else {
-                                    log("Shelf routed preview hold=" + heldMs + "ms to markup editor");
-                                    launchMarkupEditor(previewView);
+                                if (!longPressTriggered) {
+                                    log("Preview tap intercepted at " + heldMs + "ms");
+                                    launchPreviewTapAction(activeView);
                                 }
                                 param.setResult(Boolean.TRUE);
                                 return;
                             case android.view.MotionEvent.ACTION_CANCEL:
-                                if (activePreviewTouchViewRef.get() == previewView) {
-                                    clearActivePreviewTouch();
+                                clearActivePreviewTouch();
+                                param.setResult(Boolean.TRUE);
+                                return;
+                            default:
+                                if (activeView != null) {
                                     param.setResult(Boolean.TRUE);
                                 }
                                 return;
-                            default:
-                                return;
                         }
                     }
                 });
     }
 
-    private static void hookPreviewClickBinding() {
-        XposedHelpers.findAndHookMethod(View.class, "setOnClickListener", View.OnClickListener.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        if (!(param.thisObject instanceof View)) {
-                            return;
-                        }
-                        final View view = (View) param.thisObject;
-                        if (!isScreenshotPreviewView(view)) {
-                            return;
-                        }
-                        Object listener = param.args[0];
-                        if (listener == null) {
-                            return;
-                        }
-                        String listenerClassName = listener.getClass().getName();
-                        if (listenerClassName.startsWith(ScreenshotHooks.class.getPackage().getName())) {
-                            return;
-                        }
-                        final View.OnClickListener originalListener = (View.OnClickListener) listener;
-                        originalPreviewClickListeners.put(view, originalListener);
-                        view.setLongClickable(false);
-                        view.setOnLongClickListener(null);
-                        param.args[0] = new View.OnClickListener() {
-                            @Override
-                            public void onClick(View v) {
-                                log("Suppressed stock preview click dispatch after touch interception");
-                            }
-                        };
-                        log("Replaced stock screenshot preview click listener: " + listenerClassName);
-                    }
-                });
-    }
-
-    private static boolean isScreenshotPreviewView(View view) {
-        if (!(view instanceof ImageView)) {
-            return false;
+    private static long consumeRecentPreviewHoldMs(View clickedView) {
+        View recordedView = lastPreviewClickTargetRef.get();
+        long recordedAtMs = lastPreviewClickRecordedAtMs;
+        lastPreviewClickTargetRef = new WeakReference<>(null);
+        lastPreviewClickRecordedAtMs = 0L;
+        long heldMs = lastPreviewClickHeldMs;
+        lastPreviewClickHeldMs = 0L;
+        if (recordedView != clickedView) {
+            return -1L;
         }
+        if (recordedAtMs == 0L || android.os.SystemClock.uptimeMillis() - recordedAtMs > 1000L) {
+            return -1L;
+        }
+        return heldMs;
+    }
+
+    private static void hookPreviewActionModel(ClassLoader classLoader) {
+        final Class<?> previewActionClass = XposedHelpers.findClassIfExists(
+                "com.android.systemui.screenshot.ui.viewmodel.PreviewAction", classLoader);
+        if (previewActionClass == null) {
+            log("PreviewAction not found");
+            return;
+        }
+        XposedBridge.hookAllConstructors(previewActionClass, new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                final Object previewAction = param.thisObject;
+                final Object originalFunction = XposedHelpers.getObjectField(previewAction, "onClick");
+                if (originalFunction == null) {
+                    return;
+                }
+                Class<?>[] interfaces = originalFunction.getClass().getInterfaces();
+                if (interfaces.length == 0) {
+                    return;
+                }
+                Object wrappedFunction = Proxy.newProxyInstance(
+                        originalFunction.getClass().getClassLoader(),
+                        interfaces,
+                        new InvocationHandler() {
+                            @Override
+                            public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                                if (!"invoke".equals(method.getName())) {
+                                    return method.invoke(originalFunction, args);
+                                }
+                                long heldMs = consumeRecentPreviewHoldMs(lastPreviewClickTargetRef.get());
+                                if (heldMs >= PREVIEW_CHOOSER_HOLD_MS) {
+                                    log("PreviewAction allowed stock invoke for hold=" + heldMs + "ms");
+                                    return method.invoke(originalFunction, args);
+                                }
+                                View shelfView = HookState.getScreenshotShelfView();
+                                if (shelfView != null) {
+                                    log("PreviewAction intercepted short tap hold=" + heldMs + "ms");
+                                    launchPreviewTapAction(shelfView);
+                                    return null;
+                                }
+                                return method.invoke(originalFunction, args);
+                            }
+                        });
+                XposedHelpers.setObjectField(previewAction, "onClick", wrappedFunction);
+            }
+        });
+    }
+
+    private static boolean isScreenshotPreviewClickView(View view) {
         if (view.getId() == View.NO_ID) {
             return false;
         }
@@ -551,7 +629,9 @@ final class ScreenshotHooks {
             if (!"com.android.systemui".equals(view.getResources().getResourcePackageName(view.getId()))) {
                 return false;
             }
-            if (!"screenshot_preview".equals(view.getResources().getResourceEntryName(view.getId()))) {
+            String entryName = view.getResources().getResourceEntryName(view.getId());
+            if (!"screenshot_preview".equals(entryName)
+                    && !"screenshot_scrolling_scrim".equals(entryName)) {
                 return false;
             }
         } catch (Throwable t) {
@@ -561,8 +641,48 @@ final class ScreenshotHooks {
     }
 
     private static void clearActivePreviewTouch() {
+        if (activePreviewLongPressRunnable != null) {
+            MAIN_HANDLER.removeCallbacks(activePreviewLongPressRunnable);
+            activePreviewLongPressRunnable = null;
+        }
         activePreviewTouchViewRef = new WeakReference<>(null);
         activePreviewTouchDownMs = 0L;
+        activePreviewLongPressTriggered = false;
+    }
+
+    private static void schedulePreviewLongPress(final View targetView) {
+        if (activePreviewLongPressRunnable != null) {
+            MAIN_HANDLER.removeCallbacks(activePreviewLongPressRunnable);
+        }
+        activePreviewLongPressRunnable = new Runnable() {
+            @Override
+            public void run() {
+                View activeView = activePreviewTouchViewRef.get();
+                if (activeView == null || activeView != targetView) {
+                    return;
+                }
+                activePreviewLongPressTriggered = true;
+                long heldMs = Math.max(0L, android.os.SystemClock.uptimeMillis() - activePreviewTouchDownMs);
+                recordPreviewHold(activeView, heldMs);
+                log("Preview hold reached chooser threshold at " + heldMs + "ms");
+                try {
+                    activeView.performClick();
+                } catch (Throwable t) {
+                    log("Failed to forward preview hold to stock action: " + t);
+                }
+            }
+        };
+        MAIN_HANDLER.postDelayed(activePreviewLongPressRunnable, PREVIEW_CHOOSER_HOLD_MS);
+    }
+
+    private static void recordPreviewHold(View view, long heldMs) {
+        lastPreviewClickTargetRef = new WeakReference<>(view);
+        lastPreviewClickHeldMs = Math.max(0L, heldMs);
+        lastPreviewClickRecordedAtMs = android.os.SystemClock.uptimeMillis();
+    }
+
+    private static void launchPreviewTapAction(View view) {
+        launchMarkupEditor(view);
     }
 
     private static boolean isPointInsideView(View view, float rawX, float rawY) {
