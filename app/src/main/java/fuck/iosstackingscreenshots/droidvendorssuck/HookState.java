@@ -33,7 +33,10 @@ final class HookState {
     private static volatile long reentryArmedAtMs;
     private static volatile boolean reentryPreviewBound;
     private static volatile int currentBatchId = 1;
+    private static volatile int currentBatchCaptureCount;
     private static volatile int pendingDeletionBatchId = -1;
+    private static volatile long lastBatchActivityAtMs;
+    private static volatile long lastMarkupEditorLaunchAtMs;
 
     private HookState() {
     }
@@ -99,16 +102,41 @@ final class HookState {
         return new ArrayList<>(activeSavedScreenshotUris);
     }
 
+    static synchronized int getActiveSavedScreenshotCount() {
+        return activeSavedScreenshotUris.size();
+    }
+
     static synchronized void beginFreshBatch() {
         currentBatchId++;
+        currentBatchCaptureCount = 0;
         pendingDeletionBatchId = -1;
         activeSavedScreenshotUris.clear();
         exportBatchIds.clear();
         lastSavedScreenshotUri = null;
+        noteBatchActivity();
+    }
+
+    static synchronized void noteBatchCaptureRequested() {
+        currentBatchCaptureCount++;
+        noteBatchActivity();
+    }
+
+    static synchronized int getCurrentBatchCaptureCount() {
+        return currentBatchCaptureCount;
     }
 
     static synchronized int getCurrentBatchId() {
         return currentBatchId;
+    }
+
+    static synchronized int getPendingExportCountForCurrentBatch() {
+        int pending = 0;
+        for (Integer batchId : exportBatchIds.values()) {
+            if (batchId != null && batchId == currentBatchId) {
+                pending++;
+            }
+        }
+        return pending;
     }
 
     static synchronized void registerExportFuture(Object futureDelegate, int batchId) {
@@ -116,6 +144,7 @@ final class HookState {
             return;
         }
         exportBatchIds.put(futureDelegate, batchId);
+        noteBatchActivity();
     }
 
     static synchronized boolean recordSavedScreenshotUri(Object futureDelegate, Uri uri) {
@@ -134,7 +163,28 @@ final class HookState {
         if (!activeSavedScreenshotUris.contains(uri)) {
             activeSavedScreenshotUris.add(uri);
         }
+        noteBatchActivity();
         return false;
+    }
+
+    static void noteBatchActivity() {
+        lastBatchActivityAtMs = android.os.SystemClock.uptimeMillis();
+    }
+
+    static boolean hasBatchSettled(long quietPeriodMs) {
+        long lastActivityAt = lastBatchActivityAtMs;
+        return lastActivityAt == 0L
+                || android.os.SystemClock.uptimeMillis() - lastActivityAt >= quietPeriodMs;
+    }
+
+    static void markMarkupEditorLaunched() {
+        lastMarkupEditorLaunchAtMs = android.os.SystemClock.uptimeMillis();
+    }
+
+    static boolean wasMarkupEditorLaunchedRecently(long recentWindowMs) {
+        long launchedAt = lastMarkupEditorLaunchAtMs;
+        return launchedAt != 0L
+                && android.os.SystemClock.uptimeMillis() - launchedAt <= recentWindowMs;
     }
 
     static synchronized List<Uri> markSavedBatchForDeletion() {

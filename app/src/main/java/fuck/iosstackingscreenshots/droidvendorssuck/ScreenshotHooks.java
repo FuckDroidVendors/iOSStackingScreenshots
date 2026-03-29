@@ -60,6 +60,10 @@ final class ScreenshotHooks {
     private static final float CARD_FRAME_INSET_DP = 2.0f;
     private static final long STACK_UI_SETTLE_DELAY_MS = 16L;
     private static final long PREVIEW_CHOOSER_HOLD_MS = 500L;
+    private static final long EDITOR_LAUNCH_WAIT_STEP_MS = 120L;
+    private static final long EDITOR_LAUNCH_WAIT_MAX_MS = 3000L;
+    private static final long EDITOR_LAUNCH_SETTLE_MS = 500L;
+    private static final long EDITOR_REFRESH_WINDOW_MS = 8000L;
     private static final Executor DIRECT_EXECUTOR = new Executor() {
         @Override
         public void execute(Runnable command) {
@@ -76,6 +80,7 @@ final class ScreenshotHooks {
     private static volatile long lastPreviewClickHeldMs;
     private static volatile long lastPreviewClickRecordedAtMs;
     private static Runnable continuityOverlayRemoval;
+    private static Runnable pendingEditorLaunchRunnable;
 
     static {
         CARD_CONTENT_BACKGROUND_PAINT.setColor(IOS_CARD_BACKGROUND_COLOR);
@@ -222,6 +227,7 @@ final class ScreenshotHooks {
         XposedBridge.hookAllMethods(controllerClass, "handleScreenshot", new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
+                HookState.noteBatchActivity();
                 View shelfView = HookState.getScreenshotShelfView();
                 if (shelfView != null && shelfView.isAttachedToWindow()) {
                     removeContinuityOverlay(false);
@@ -232,6 +238,7 @@ final class ScreenshotHooks {
                     HookState.beginFreshBatch();
                     HookState.clearPreviewStack();
                 }
+                HookState.noteBatchCaptureRequested();
             }
         });
     }
@@ -291,7 +298,11 @@ final class ScreenshotHooks {
             protected void afterHookedMethod(MethodHookParam param) {
                 log("ScreenshotWindow.removeWindow called; preserving cached window for reuse");
                 if (!HookState.isReentryGraceActive()) {
-                    HookState.clearPreviewStack();
+                    boolean preserveBatchForEditor = HookState.wasMarkupEditorLaunchedRecently(
+                            EDITOR_REFRESH_WINDOW_MS);
+                    if (!preserveBatchForEditor) {
+                        HookState.clearPreviewStack();
+                    }
                     View shelfView = HookState.getScreenshotShelfView();
                     if (shelfView != null) {
                         clearStackUi(shelfView);
@@ -375,9 +386,31 @@ final class ScreenshotHooks {
                 deleteSavedScreenshotUri(uri);
             } else {
                 log("Tracked saved screenshot uri " + uri);
+                refreshMarkupEditorBatchIfVisible();
             }
         } catch (Throwable t) {
             log("Failed to read ImageExporter result: " + t);
+        }
+    }
+
+    private static void refreshMarkupEditorBatchIfVisible() {
+        if (!HookState.wasMarkupEditorLaunchedRecently(EDITOR_REFRESH_WINDOW_MS)) {
+            return;
+        }
+        Context context = getMarkupEditorLaunchContext();
+        if (context == null) {
+            return;
+        }
+        Uri screenshotUri = HookState.getLastSavedScreenshotUri();
+        if (screenshotUri == null) {
+            return;
+        }
+        try {
+            context.startActivity(buildMarkupEditorIntent(screenshotUri));
+            HookState.markMarkupEditorLaunched();
+            log("Refreshed markup editor batch after late export");
+        } catch (Throwable t) {
+            log("Failed to refresh markup editor batch: " + t);
         }
     }
 
@@ -418,6 +451,43 @@ final class ScreenshotHooks {
     }
 
     private static void launchMarkupEditor(View view) {
+        waitForPendingExportsAndLaunchEditor(view, 0L);
+    }
+
+    private static void waitForPendingExportsAndLaunchEditor(final View view, final long waitedMs) {
+        if (view == null) {
+            return;
+        }
+        int pendingExports = HookState.getPendingExportCountForCurrentBatch();
+        boolean batchSettled = HookState.hasBatchSettled(EDITOR_LAUNCH_SETTLE_MS);
+        int savedCount = HookState.getActiveSavedScreenshotCount();
+        int capturedCount = HookState.getCurrentBatchCaptureCount();
+        boolean capturesFullySaved = savedCount >= capturedCount;
+        if ((!batchSettled || pendingExports > 0 || !capturesFullySaved) && waitedMs < EDITOR_LAUNCH_WAIT_MAX_MS) {
+            if (pendingEditorLaunchRunnable != null) {
+                MAIN_HANDLER.removeCallbacks(pendingEditorLaunchRunnable);
+            }
+            final long nextWaitedMs = waitedMs + EDITOR_LAUNCH_WAIT_STEP_MS;
+            pendingEditorLaunchRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    pendingEditorLaunchRunnable = null;
+                    waitForPendingExportsAndLaunchEditor(view, nextWaitedMs);
+                }
+            };
+            MAIN_HANDLER.postDelayed(pendingEditorLaunchRunnable, EDITOR_LAUNCH_WAIT_STEP_MS);
+            log("Delaying markup editor launch; pending exports=" + pendingExports
+                    + " batchSettled=" + batchSettled
+                    + " savedCount=" + savedCount
+                    + " capturedCount=" + capturedCount
+                    + " waitedMs=" + waitedMs);
+            return;
+        }
+        pendingEditorLaunchRunnable = null;
+        launchMarkupEditorNow(view);
+    }
+
+    private static void launchMarkupEditorNow(View view) {
         Uri screenshotUri = HookState.getLastSavedScreenshotUri();
         if (screenshotUri == null) {
             showPreviewTapToast(view);
@@ -425,28 +495,34 @@ final class ScreenshotHooks {
         }
         try {
             Context context = view.getContext();
-            ArrayList<Uri> editorBatch = buildEditorBatch(screenshotUri);
-            Intent intent = new Intent();
-            intent.setComponent(new ComponentName(
-                    "fuck.iosstackingscreenshots.droidvendorssuck",
-                    MarkupEditorActivity.class.getName()));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    | Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                    | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            intent.setData(screenshotUri);
-            intent.setClipData(buildEditorClipData(editorBatch));
-            intent.putExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_URI, screenshotUri);
-            intent.putParcelableArrayListExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_BATCH_URIS, editorBatch);
-            intent.putExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_INDEX, 0);
+            Intent intent = buildMarkupEditorIntent(screenshotUri);
             context.startActivity(intent);
+            HookState.markMarkupEditorLaunched();
             dismissScreenshotShelf();
             log("Launched markup editor for " + screenshotUri);
         } catch (Throwable t) {
             log("Failed to launch markup editor: " + t);
             Toast.makeText(view.getContext(), "Failed to open editor", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private static Intent buildMarkupEditorIntent(Uri screenshotUri) {
+        ArrayList<Uri> editorBatch = buildEditorBatch(screenshotUri);
+        Intent intent = new Intent();
+        intent.setComponent(new ComponentName(
+                "fuck.iosstackingscreenshots.droidvendorssuck",
+                MarkupEditorActivity.class.getName()));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        intent.setData(screenshotUri);
+        intent.setClipData(buildEditorClipData(editorBatch));
+        intent.putExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_URI, screenshotUri);
+        intent.putParcelableArrayListExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_BATCH_URIS, editorBatch);
+        intent.putExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_INDEX, 0);
+        return intent;
     }
 
     private static ArrayList<Uri> buildEditorBatch(Uri selectedUri) {
@@ -487,6 +563,23 @@ final class ScreenshotHooks {
         } catch (Throwable t) {
             log("Failed to dismiss screenshot shelf after editor launch: " + t);
         }
+    }
+
+    private static Context getMarkupEditorLaunchContext() {
+        View shelfView = HookState.getScreenshotShelfView();
+        if (shelfView != null) {
+            return shelfView.getContext();
+        }
+        Object screenshotWindow = HookState.getScreenshotWindow();
+        if (screenshotWindow == null) {
+            return null;
+        }
+        Object phoneWindow = ReflectionHelpers.getObjectFieldIfExists(screenshotWindow, "window");
+        if (phoneWindow == null) {
+            return null;
+        }
+        Object context = ReflectionHelpers.callMethodIfExists(phoneWindow, "getContext");
+        return context instanceof Context ? (Context) context : null;
     }
 
     private static void hookPreviewTouchRouting(ClassLoader classLoader) {

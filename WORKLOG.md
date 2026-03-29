@@ -1,6 +1,20 @@
 # Work Log
 
 ## 2026-03-29
+- Investigated rapid-burst stack tracking for the markup editor after a report that very fast screenshot bursts could open with fewer items than expected:
+  - reproduced the race on-device by firing a 10-shot burst and opening the editor immediately, which initially produced cases like `9 of 10` and `5 of 10`
+  - root cause was twofold in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java):
+    - the editor could launch before all `ImageExporter` results for the current burst had been registered and saved
+    - once the shelf was dismissed for editor handoff, late exports from that same burst were no longer able to extend the already-open editor batch cleanly
+  - hardened the handoff by:
+    - tracking current-burst capture count, saved-`Uri` count, pending export count, and recent batch activity in [HookState.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/HookState.java)
+    - delaying initial editor launch until the burst has settled or the timeout is reached
+    - preserving batch tracking across editor-triggered `ScreenshotWindow.removeWindow()`
+    - refreshing the single-task `MarkupEditorActivity` with an updated batch when late exports arrive after the initial launch
+- Verified autonomously on-device after rebuild/reinstall/restart:
+  - a previously failing immediate-open burst case now refreshed the editor up to `9 screenshots`, matching the `9` saved `Uri`s actually tracked in that run
+  - the logs now show `Refreshed markup editor batch after late export`, confirming that late saves are propagated into the already-open editor
+  - the editor process was force-stopped after each automated burst test to keep runs isolated
 - Investigated and fixed a post-editor shelf-position regression in the stacked screenshot preview:
   - reproduction showed the thumbnail could shift partly off-screen after opening the markup editor, closing it, and taking screenshots again
   - root cause was the `ScreenshotWindow.removeWindow()` hook treating the window as disposable even though this ROM reuses the same `ScreenshotWindow` / shelf objects after editor handoff
