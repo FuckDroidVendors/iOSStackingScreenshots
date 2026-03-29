@@ -1,6 +1,7 @@
 # iOS Stacking Screenshots
 
-[recording.mp4](recording.mp4)
+
+https://github.com/user-attachments/assets/8a73b859-712e-423e-9079-88a1dacde5c5
 
 LSPosed-based prototype for Android 15 screenshot UX on a rooted POCO F1 running crDroid 11.9.
 
