@@ -1,6 +1,9 @@
 package fuck.iosstackingscreenshots.droidvendorssuck;
 
 import android.animation.AnimatorSet;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -409,13 +412,31 @@ final class ScreenshotHooks {
     }
 
     private static void showPreviewTapToast(View view) {
-        int stackCount = HookState.getStackBitmaps().size();
-        int totalCount = stackCount + (HookState.getLastPreviewBitmap() != null ? 1 : 0);
-        String message = totalCount > 1
-                ? "Tapped screenshot stack (" + totalCount + ")"
-                : "Tapped screenshot";
-        Toast.makeText(view.getContext(), message, Toast.LENGTH_SHORT).show();
-        log("Preview tapped; showed toast for count=" + totalCount);
+        Toast.makeText(view.getContext(), R.string.editor_not_ready, Toast.LENGTH_SHORT).show();
+        log("Preview tapped before saved screenshot uri was ready");
+    }
+
+    private static void launchMarkupEditor(View view) {
+        Uri screenshotUri = HookState.getLastSavedScreenshotUri();
+        if (screenshotUri == null) {
+            showPreviewTapToast(view);
+            return;
+        }
+        try {
+            Context context = view.getContext();
+            Intent intent = new Intent();
+            intent.setComponent(new ComponentName(
+                    "fuck.iosstackingscreenshots.droidvendorssuck",
+                    MarkupEditorActivity.class.getName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.setData(screenshotUri);
+            intent.putExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_URI, screenshotUri);
+            context.startActivity(intent);
+            log("Launched markup editor for " + screenshotUri);
+        } catch (Throwable t) {
+            log("Failed to launch markup editor: " + t);
+            Toast.makeText(view.getContext(), "Failed to open editor", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private static void hookPreviewTouchRouting(ClassLoader classLoader) {
@@ -466,8 +487,8 @@ final class ScreenshotHooks {
                                     log("Shelf routed preview hold=" + heldMs + "ms to stock action");
                                     stockListener.onClick(previewView);
                                 } else {
-                                    log("Shelf routed preview hold=" + heldMs + "ms to toast");
-                                    showPreviewTapToast(previewView);
+                                    log("Shelf routed preview hold=" + heldMs + "ms to markup editor");
+                                    launchMarkupEditor(previewView);
                                 }
                                 param.setResult(Boolean.TRUE);
                                 return;

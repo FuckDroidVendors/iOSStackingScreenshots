@@ -7,6 +7,24 @@
   - [framework.jar](/home/duda/screenshotdroid/framework.jar)
   - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c)
   - [services.jar](/home/duda/screenshotdroid/services.jar)
+- Added the first markup-editor implementation:
+  - created [MarkupEditorActivity.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/MarkupEditorActivity.java)
+  - created [MarkupEditorStageView.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/MarkupEditorStageView.java)
+  - added [activity_markup_editor.xml](/home/duda/screenshotdroid/app/src/main/res/layout/activity_markup_editor.xml)
+  - registered the editor activity in [AndroidManifest.xml](/home/duda/screenshotdroid/app/src/main/AndroidManifest.xml)
+- Replaced the debug short-tap toast path in [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java) with editor launch for the latest saved screenshot `Uri`, while keeping long-press routed to the stock chooser/open action.
+- The first editor cut intentionally keeps scope narrow:
+  - only renders the saved screenshot on a dedicated stage
+  - `Done` simply closes the activity
+  - bottom editing tools are placeholders only
+  - crop handles are currently visual only
+- Documented the markup editor direction in [docs/markup-editor-architecture.md](/home/duda/screenshotdroid/docs/markup-editor-architecture.md), including the choice to defer Lua/JS scripting and use a native view plus structured edit-document model first.
+- Re-checked repository state before work. Untracked device artifacts remain:
+  - [INFO](/home/duda/screenshotdroid/INFO)
+  - [SystemUI.apk](/home/duda/screenshotdroid/SystemUI.apk)
+  - [framework.jar](/home/duda/screenshotdroid/framework.jar)
+  - [screenshot_plugin.c](/home/duda/screenshotdroid/screenshot_plugin.c)
+  - [services.jar](/home/duda/screenshotdroid/services.jar)
 - Re-read the current project docs and inspected the in-progress LSPosed hook changes before editing.
 - Continued the screenshot-batch deletion path in the rooted prototype:
   - finished batch-aware saved-URI tracking in [HookState.java](/home/duda/screenshotdroid/app/src/main/java/dev/duda/screenshotdroid/HookState.java)
