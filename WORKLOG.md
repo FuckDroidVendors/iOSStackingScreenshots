@@ -326,3 +326,6 @@
   - diagnosed the false "can't take screenshots" error as a crash in `createCardBitmap(...)` after capture had already succeeded and the file had already been saved
   - fixed that crash by converting hardware preview bitmaps before drawing them into software-backed framed card bitmaps
   - current visual state: 2-shot stacking is aligned with the 3-shot renderer, and screenshot capture no longer fails due to the composed-frame path
+
+## 2026-03-29
+- Updated `README.md` to add `recording.mp4` at the top, move install instructions higher, and remove the old `dev.duda.screenshotdroid` package reference.
