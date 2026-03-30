@@ -402,7 +402,7 @@ final class ScreenshotHooks {
             return;
         }
         try {
-            context.startActivity(buildMarkupEditorIntent(screenshotUri));
+            dispatchMarkupEditorLaunch(context, screenshotUri);
             HookState.markMarkupEditorLaunched();
             log("Refreshed markup editor batch after late export");
         } catch (Throwable t) {
@@ -458,8 +458,7 @@ final class ScreenshotHooks {
         }
         try {
             Context context = view.getContext();
-            Intent intent = buildMarkupEditorIntent(screenshotUri);
-            context.startActivity(intent);
+            dispatchMarkupEditorLaunch(context, screenshotUri);
             HookState.markMarkupEditorLaunched();
             dismissScreenshotShelf();
             log("Launched markup editor for " + screenshotUri);
@@ -469,12 +468,19 @@ final class ScreenshotHooks {
         }
     }
 
+    private static void dispatchMarkupEditorLaunch(Context context, Uri screenshotUri) {
+        Intent intent = buildMarkupEditorIntent(screenshotUri);
+        grantMarkupEditorUriPermissions(context,
+                intent.getParcelableArrayListExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_BATCH_URIS));
+        context.startActivity(intent);
+    }
+
     private static Intent buildMarkupEditorIntent(Uri screenshotUri) {
         ArrayList<Uri> editorBatch = buildEditorBatch(screenshotUri);
         Intent intent = new Intent();
         intent.setComponent(new ComponentName(
                 "fuck.iosstackingscreenshots.droidvendorssuck",
-                MarkupEditorActivity.class.getName()));
+                MarkupEditorLaunchActivity.class.getName()));
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_ACTIVITY_CLEAR_TOP
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -486,6 +492,25 @@ final class ScreenshotHooks {
         intent.putParcelableArrayListExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_BATCH_URIS, editorBatch);
         intent.putExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_INDEX, 0);
         return intent;
+    }
+
+    private static void grantMarkupEditorUriPermissions(Context context, ArrayList<Uri> batchUris) {
+        if (context == null || batchUris == null) {
+            return;
+        }
+        for (Uri uri : batchUris) {
+            if (uri == null) {
+                continue;
+            }
+            try {
+                context.grantUriPermission(
+                        "fuck.iosstackingscreenshots.droidvendorssuck",
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (Throwable t) {
+                log("Failed to grant markup editor read permission for " + uri + ": " + t);
+            }
+        }
     }
 
     private static ArrayList<Uri> buildEditorBatch(Uri selectedUri) {

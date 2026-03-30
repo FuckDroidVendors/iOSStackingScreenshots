@@ -1,6 +1,21 @@
 # Work Log
 
 ## 2026-03-29
+- Investigated why the markup editor still felt slow to appear even after switching burst handling back to immediate open:
+  - measured a real tap-to-launch delay of roughly `3.2s` between `Preview tap intercepted` and `Launched markup editor`
+  - confirmed the delay was no longer caused by the old hold threshold or export-settling logic
+  - determined that launching the editor directly from the overloaded `com.android.systemui:screenshot` process still left too much handoff latency during screenshot bursts
+- Tried an app-process broadcast trampoline first, but Android 15 background-activity-launch hardening blocked the receiver from starting `MarkupEditorActivity`
+- Replaced that with a transparent exported trampoline activity:
+  - [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java) now starts `MarkupEditorLaunchActivity` instead of launching the full editor directly
+  - [MarkupEditorLaunchActivity.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/MarkupEditorLaunchActivity.java) immediately forwards the existing batch payload, `ClipData`, and `Uri` grants into `MarkupEditorActivity` inside the app process, then finishes with no visible chrome
+  - [AndroidManifest.xml](/home/duda/screenshotdroid/app/src/main/AndroidManifest.xml) now declares the trampoline activity as exported, translucent, no-history, and excluded from recents
+- Verified autonomously on-device after rebuilding, reinstalling, and restarting `SystemUI`:
+  - `Preview tap intercepted` logged at `03-30 02:30:11.255`
+  - `MarkupEditorActivity` was reported as displayed at `03-30 02:30:11.882`
+  - effective tap-to-visible time dropped to about `0.63s`
+  - `MarkupEditorActivity` became the top resumed activity
+  - the markup editor process was force-stopped after the timing run to keep the test isolated
 - Changed the markup-editor burst UX from delayed launch to immediate launch with live batch extension:
   - removed the pre-launch wait loop from [ScreenshotHooks.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/ScreenshotHooks.java)
   - kept the single-task editor reuse path and now refresh the running `MarkupEditorActivity` when late screenshot exports from the same burst finish saving
