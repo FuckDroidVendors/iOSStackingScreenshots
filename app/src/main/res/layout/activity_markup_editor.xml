@@ -29,6 +29,19 @@
             android:textAllCaps="false"
             android:textColor="#FFFFFFFF" />
 
+        <Button
+            android:id="@+id/share_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:backgroundTint="#1F252D"
+            android:minWidth="0dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/editor_share"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFFFF" />
+
         <TextView
             android:id="@+id/editor_title"
             android:layout_width="wrap_content"
@@ -70,40 +83,33 @@
         android:scrollbars="none">
 
         <LinearLayout
+            android:id="@+id/editor_tool_row"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
             <Button
+                android:id="@+id/tool_pen_button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
-                android:enabled="false"
                 android:text="@string/editor_tool_pen"
                 android:textAllCaps="false" />
 
             <Button
+                android:id="@+id/tool_crop_button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
-                android:enabled="false"
                 android:text="@string/editor_tool_crop"
                 android:textAllCaps="false" />
 
-            <Button
+            <LinearLayout
+                android:id="@+id/editor_color_row"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:enabled="false"
-                android:text="@string/editor_tool_shapes"
-                android:textAllCaps="false" />
-
-            <Button
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:enabled="false"
-                android:text="@string/editor_tool_colors"
-                android:textAllCaps="false" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
         </LinearLayout>
     </HorizontalScrollView>
 </LinearLayout>

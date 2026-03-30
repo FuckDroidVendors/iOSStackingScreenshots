@@ -32,7 +32,8 @@ public final class MarkupEditorLaunchActivity extends Activity {
                 | Intent.FLAG_ACTIVITY_CLEAR_TOP
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP
                 | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                | Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 
         if (intent == null) {
             startActivity(activityIntent);

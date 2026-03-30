@@ -485,7 +485,8 @@ final class ScreenshotHooks {
                 | Intent.FLAG_ACTIVITY_CLEAR_TOP
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP
                 | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                | Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
         intent.setData(screenshotUri);
         intent.setClipData(buildEditorClipData(editorBatch));
         intent.putExtra(MarkupEditorActivity.EXTRA_SCREENSHOT_URI, screenshotUri);
@@ -504,9 +505,9 @@ final class ScreenshotHooks {
             }
             try {
                 context.grantUriPermission(
-                        "fuck.iosstackingscreenshots.droidvendorssuck",
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    "fuck.iosstackingscreenshots.droidvendorssuck",
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             } catch (Throwable t) {
                 log("Failed to grant markup editor read permission for " + uri + ": " + t);
             }

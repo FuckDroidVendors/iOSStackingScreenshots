@@ -26,8 +26,13 @@
 - [ ] Add save-vs-delete confirmation when leaving the markup editor via `Done`.
 - [ ] Implement actual editor tools: freehand pen/highlighter, colors, stroke width, and basic shape insertion.
 - [ ] Turn the current static crop handles into real draggable crop bounds with corner and edge affordances.
+- [ ] Add drag-to-dismiss for the screenshot shelf and make dismissal behavior configurable: auto-dismiss timeout, manual drag-away enabled/disabled, and whether drag-dismiss also deletes the screenshot.
+- [ ] Build a small companion/settings surface inside the same APK/package so the LSPosed module and app can share preferences for shelf dismissal, drag behavior, export defaults, and diagnostics.
+- [ ] Investigate hooking the screenshot save pipeline to store new screenshots as `JXL`/JPEG XL by default to reduce storage use.
+- [ ] Decide the edited-output policy for `JXL` sources: keep untouched screenshots as `JXL`, but convert to `PNG` automatically for crop/drag/export flows that require broad sharing compatibility.
 - [x] Decide whether batch editing should open only the newest screenshot first or support stack navigation inside the editor.
 - [ ] Add clearer visual paging affordances to the markup editor now that left/right swipe navigation is live.
+- [ ] Add iOS-style editor affordances next: undo/redo, highlighter thickness, text callouts, signatures, shapes/arrows, and magnifier.
 - [ ] Define the editor document model and sidecar format for non-destructive edits.
 - [ ] Keep the editor layout native XML and the edit document data-driven; defer any Lua/JS scripting surface until the core tool model is stable.
 - [ ] Determine whether excluding the whole `ScreenshotUI` window removes any stock controls that should remain in the final UX.

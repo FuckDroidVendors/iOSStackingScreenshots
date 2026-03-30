@@ -1,6 +1,18 @@
 # Work Log
 
 ## 2026-03-29
+- Started the first actually functional editor pass after the single-task batch handoff stabilized:
+  - replaced the dead editor shell with working `Done`/`Share` actions, interactive crop handles, live pen markup, and visible color swatches in [MarkupEditorActivity.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/MarkupEditorActivity.java), [MarkupEditorStageView.java](/home/duda/screenshotdroid/app/src/main/java/fuck/iosstackingscreenshots/droidvendorssuck/MarkupEditorStageView.java), [activity_markup_editor.xml](/home/duda/screenshotdroid/app/src/main/res/layout/activity_markup_editor.xml), and [strings.xml](/home/duda/screenshotdroid/app/src/main/res/values/strings.xml)
+  - `Done` now opens a save/delete/cancel dialog instead of closing immediately
+  - `Share` now saves the current edited image back to the screenshot `Uri` and opens the Android share sheet
+  - crop handles now drag corners, edges, and the crop body itself, and export uses the cropped result instead of the full image
+  - pen strokes are now rendered/exported in bitmap-relative coordinates so markup persists correctly through crop/export
+  - the launch handoff now grants write permission in addition to read permission so edited screenshots can be overwritten or deleted from the editor
+- Updated [TODO.md](/home/duda/screenshotdroid/TODO.md) with the next requested work:
+  - add a companion/settings UI inside the same APK/package
+  - add configurable auto-dismiss and drag-to-dismiss shelf behavior
+  - investigate `JXL`/JPEG XL as the default screenshot save format and define when edited outputs should fall back to `PNG`
+  - queue more iOS-style editor features such as undo/redo, text/signature/magnifier, and richer shape tools
 - Investigated why the markup editor still felt slow to appear even after switching burst handling back to immediate open:
   - measured a real tap-to-launch delay of roughly `3.2s` between `Preview tap intercepted` and `Launched markup editor`
   - confirmed the delay was no longer caused by the old hold threshold or export-settling logic
